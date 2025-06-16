@@ -15,17 +15,10 @@ RUN mkdir -p /etc/nginx/ssl \
 # Copy nginx configuration template
 COPY docker/nginx.conf.template /etc/nginx/nginx.conf.template
 
-# Copy SSL certificates (only if they exist)
-# Create empty SSL directory first to avoid build failures
-RUN mkdir -p /tmp/ssl
-COPY docker/ssl* /tmp/ssl/ 2>/dev/null || true
-RUN if [ -n "$(ls -A /tmp/ssl 2>/dev/null)" ]; then \
-        cp -r /tmp/ssl/* /etc/nginx/ssl/; \
-        echo "SSL certificates copied successfully"; \
-    else \
-        echo "No SSL certificates found, creating placeholder"; \
-        echo "# Placeholder for SSL certificates" > /etc/nginx/ssl/README.txt; \
-    fi
+# Create SSL directory and placeholder (SSL certificates can be mounted as volume)
+RUN mkdir -p /etc/nginx/ssl && \
+    echo "# SSL certificates go here" > /etc/nginx/ssl/README.txt && \
+    echo "# Mount SSL certificates as volume: -v /path/to/ssl:/etc/nginx/ssl" >> /etc/nginx/ssl/README.txt
 
 # Copy startup script
 COPY docker/nginx-start.sh /docker-entrypoint.d/40-nginx-start.sh
