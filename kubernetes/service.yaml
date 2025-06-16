@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-search-api-service
+  namespace: llm-search-backend
+  labels:
+    app: llm-search-api
+spec:
+  selector:
+    app: llm-search-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: llm-search-backend
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: llm-search-backend
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
