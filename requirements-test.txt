@@ -1,6 +1,6 @@
 # Testing Dependencies - Fixed Version Conflicts
 # Core testing framework
-pytest==7.4.4
+pytest==7.2.2                 # Compatible with all other pytest-related dependencies
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
 pytest-mock==3.12.0
@@ -13,24 +13,21 @@ responses==0.24.1
 httpx==0.25.2
 faker==20.1.0
 
-# Code quality tools - Updated to resolve conflicts
-black==24.1.1  # Updated from 23.11.0
+# Code quality tools - Compatible with newer Python versions
+black==24.1.1                 # Updated from 23.11.0
 isort==5.13.2
 flake8==7.0.0
 mypy==1.8.0
 
-# Security scanning - Updated to resolve packaging conflict
-safety==3.0.1  # Updated from 2.3.5 - now compatible with packaging>=22.0
+# Security scanning
+safety==3.0.1                 # Compatible with packaging>=22.0
 bandit==1.7.5
-
-# Documentation testing (doctest is built-in to Python)
-# doctest - built-in module, no installation needed
 
 # Performance testing
 locust==2.17.0
 
 # API testing
-tavern==2.5.0
+tavern==2.5.0                 # Requires pytest < 7.3
 
 # Database testing helpers
 pytest-postgresql==5.0.0
