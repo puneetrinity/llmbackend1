@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     @validator("ALLOWED_ORIGINS", pre=True)
     def parse_cors_origins(cls, v):
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(","]
+            return [origin.strip() for origin in v.split(",")]
         return v
     
     @validator("DEBUG", pre=True)
