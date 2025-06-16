@@ -64,9 +64,9 @@ jobs:
     
     - name: Run linting
       run: |
-        flake8 app tests --max-line-length=100
-        black app tests --check
-        isort app tests --check-only
+        flake8 app app/tests --max-line-length=100 
+        black app app/tests --check
+        isort app app/tests --check-only
     
     - name: Run type checking
       run: mypy app --ignore-missing-imports
