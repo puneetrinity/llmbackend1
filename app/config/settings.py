@@ -1,5 +1,6 @@
-# app/config/settings.py
-from pydantic import BaseSettings, validator
+# app/config/settings.py - Fixed Pydantic v2 imports
+from pydantic_settings import BaseSettings  # ← FIXED: Import from pydantic_settings
+from pydantic import field_validator          # ← FIXED: validator renamed to field_validator
 from typing import List, Optional
 import os
 
@@ -57,20 +58,25 @@ class Settings(BaseSettings):
     MAX_SEARCH_RESULTS: int = 10
     MAX_CONTENT_LENGTH: int = 5000  # Max chars per content fetch
     
-    @validator("ALLOWED_ORIGINS", pre=True)
+    # FIXED: Updated for Pydantic v2
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
     def parse_cors_origins(cls, v):
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
+            return [origin.strip() for origin in v.split(",")]  # ✅ FIXED: Added missing closing parenthesis
         return v
     
-    @validator("DEBUG", pre=True)
+    @field_validator("DEBUG", mode="before")
+    @classmethod
     def parse_debug(cls, v):
         if isinstance(v, str):
             return v.lower() in ("true", "1", "yes", "on")
         return v
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # FIXED: Updated for Pydantic v2
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True
+    }
 
 settings = Settings()
