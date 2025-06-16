@@ -3,7 +3,7 @@
 # =====================================
 # Web Framework & API
 # =====================================
-fastapi>=0.104.1,<0.105.0
+fastapi>=0.110.0                      
 uvicorn[standard]>=0.24.0,<0.25.0
 pydantic>=2.5.0,<3.0.0
 pydantic-settings>=2.1.0,<3.0.0
@@ -112,13 +112,7 @@ user-agents>=2.2.0,<3.0.0
 
 # Security updates to fix HIGH severity vulnerabilities
 setuptools>=78.1.1          # Fixes CVE-2022-40897, CVE-2024-6345, CVE-2025-47273
-fastapi>=0.115.0           # Includes starlette>=0.40.0, fixes CVE-2024-47874
 starlette>=0.40.0          # Explicit fix for DoS vulnerability
-
-# Alternative: If you want to pin specific secure versions
-# setuptools==78.1.1
-# fastapi==0.115.0
-# starlette==0.40.0
 
 # =====================================
 # Optional Production Dependencies
