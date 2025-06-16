@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-search-config
+  namespace: llm-search-backend
+data:
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
+  OLLAMA_HOST: "http://ollama-service:11434"
+  LLM_MODEL: "llama2:7b"
+  LLM_MAX_TOKENS: "500"
+  REDIS_URL: "redis://redis-service:6379"
+  RATE_LIMIT_PER_MINUTE: "100"
+  DAILY_BUDGET_USD: "200.0"
+  MAX_SOURCES_PER_QUERY: "8"
