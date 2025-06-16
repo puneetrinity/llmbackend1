@@ -1,0 +1,16 @@
+# Dockerfile.railway-image - Use pre-built image from GHCR
+FROM ghcr.io/puneetrinity/llmbackend1/app:main-5ac5803
+
+# Railway-specific port configuration
+ENV PORT=8000
+EXPOSE $PORT
+
+# Ensure startup script is executable (if it exists in your image)
+RUN chmod +x /app/railway-start.sh 2>/dev/null || true
+
+# Health check for Railway
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
+
+# Use existing startup command from your image
+# Railway will override with startCommand if needed
