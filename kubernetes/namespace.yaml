@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-search-backend
+  labels:
+    name: llm-search-backend
+    environment: production
