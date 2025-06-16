@@ -1,18 +1,15 @@
-python -c "
+- name: Clean and fix Bandit SARIF file
+  run: |
+    python -c "
 import json
 
-def clean_dict(d):
-    # Recursively remove empty string keys
-    if isinstance(d, dict):
-        return {
-            k: clean_dict(v)
-            for k, v in d.items()
-            if k != ''
-        }
-    elif isinstance(d, list):
-        return [clean_dict(i) for i in d]
+def clean_dict(obj):
+    if isinstance(obj, dict):
+        return {k: clean_dict(v) for k, v in obj.items() if k != ''}
+    elif isinstance(obj, list):
+        return [clean_dict(i) for i in obj]
     else:
-        return d
+        return obj
 
 try:
     with open('bandit-results.sarif', 'r') as f:
@@ -20,25 +17,23 @@ try:
 
     data = clean_dict(data)
 
-    # Ensure required SARIF fields
     data.setdefault('version', '2.1.0')
     data.setdefault('$schema', 'https://json.schemastore.org/sarif-2.1.0.json')
+
     if 'runs' in data:
         for run in data['runs']:
             if 'tool' not in run:
                 run['tool'] = {
                     'driver': {
                         'name': 'Bandit',
-                        'version': '1.7.5',
-                        'informationUri': 'https://bandit.readthedocs.io'
+                        'version': '1.8.3',
+                        'informationUri': 'https://bandit.readthedocs.io/'
                     }
                 }
 
     with open('bandit-results.sarif', 'w') as f:
         json.dump(data, f, indent=2)
-
-    print('✅ SARIF cleaned and saved.')
-
+    print('✅ Cleaned SARIF and saved.')
 except Exception as e:
     print(f'⚠️ SARIF cleaning failed: {e}')
     with open('bandit-results.sarif', 'w') as f:
@@ -49,11 +44,10 @@ except Exception as e:
                 'tool': {
                     'driver': {
                         'name': 'Bandit',
-                        'version': '1.7.5'
+                        'version': '1.8.3'
                     }
                 },
                 'results': []
             }]
         }, f, indent=2)
-    print('✅ Fallback SARIF created.')
-"
+    print('✅ Wrote fallback SARIF.")
