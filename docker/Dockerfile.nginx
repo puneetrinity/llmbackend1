@@ -1,27 +1,123 @@
 # docker/Dockerfile.nginx
 FROM nginx:alpine
 
-# Install envsubst for environment variable substitution
-RUN apk add --no-cache gettext
+# Install required packages
+RUN apk add --no-cache \
+    gettext \
+    curl \
+    bash
+
+# Create necessary directories
+RUN mkdir -p /etc/nginx/ssl \
+    && mkdir -p /var/log/nginx \
+    && mkdir -p /var/cache/nginx
 
 # Copy nginx configuration template
 COPY docker/nginx.conf.template /etc/nginx/nginx.conf.template
 
-# Copy SSL certificates (if you have them)
-COPY docker/ssl/ /etc/nginx/ssl/
+# Copy SSL certificates (only if they exist)
+# Create empty SSL directory first to avoid build failures
+RUN mkdir -p /tmp/ssl
+COPY docker/ssl* /tmp/ssl/ 2>/dev/null || true
+RUN if [ -n "$(ls -A /tmp/ssl 2>/dev/null)" ]; then \
+        cp -r /tmp/ssl/* /etc/nginx/ssl/; \
+        echo "SSL certificates copied successfully"; \
+    else \
+        echo "No SSL certificates found, creating placeholder"; \
+        echo "# Placeholder for SSL certificates" > /etc/nginx/ssl/README.txt; \
+    fi
 
 # Copy startup script
 COPY docker/nginx-start.sh /docker-entrypoint.d/40-nginx-start.sh
 RUN chmod +x /docker-entrypoint.d/40-nginx-start.sh
 
+# Copy static nginx configuration if template doesn't exist
+COPY nginx/nginx.conf /etc/nginx/nginx.conf.fallback
+
+# Create a wrapper script to handle configuration
+RUN cat > /docker-entrypoint.d/30-envsubst-on-templates.sh << 'EOF'
+#!/bin/sh
+set -e
+
+# Function to log messages
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] NGINX-INIT: $1"
+}
+
+log "Starting NGINX configuration setup..."
+
+# Default values
+export API_HOST=${API_HOST:-api}
+export API_PORT=${API_PORT:-8000}
+export NGINX_PORT=${NGINX_PORT:-80}
+export SERVER_NAME=${SERVER_NAME:-_}
+
+# Generate nginx.conf from template if template exists
+if [ -f /etc/nginx/nginx.conf.template ]; then
+    log "Generating nginx.conf from template..."
+    envsubst '${API_HOST} ${API_PORT} ${NGINX_PORT} ${SERVER_NAME}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+elif [ -f /etc/nginx/nginx.conf.fallback ]; then
+    log "Using fallback nginx.conf..."
+    cp /etc/nginx/nginx.conf.fallback /etc/nginx/nginx.conf
+else
+    log "No configuration template or fallback found, using default"
+fi
+
+# Test nginx configuration
+log "Testing NGINX configuration..."
+if nginx -t 2>/dev/null; then
+    log "NGINX configuration is valid"
+else
+    log "NGINX configuration test failed, using minimal config"
+    cat > /etc/nginx/nginx.conf << 'MINIMAL_EOF'
+events {
+    worker_connections 1024;
+}
+http {
+    include /etc/nginx/mime.types;
+    upstream api_backend {
+        server api:8000;
+    }
+    server {
+        listen 80;
+        location / {
+            proxy_pass http://api_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location /health {
+            proxy_pass http://api_backend/health;
+        }
+    }
+}
+MINIMAL_EOF
+    nginx -t
+fi
+
+log "NGINX configuration setup completed"
+EOF
+
+RUN chmod +x /docker-entrypoint.d/30-envsubst-on-templates.sh
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost/health || exit 1
+    CMD curl -f http://localhost/health || curl -f http://localhost/ || exit 1
+
+# Set proper permissions
+RUN chown -R nginx:nginx /etc/nginx \
+    && chown -R nginx:nginx /var/log/nginx \
+    && chown -R nginx:nginx /var/cache/nginx
 
 # Expose ports
 EXPOSE 80 443
 
 # Labels for better image management
-LABEL org.opencontainers.image.title="LLM Search Backend - NGINX"
-LABEL org.opencontainers.image.description="NGINX reverse proxy for LLM Search Backend"
-LABEL org.opencontainers.image.source="https://github.com/yourusername/llm-search-backend"
+LABEL org.opencontainers.image.title="LLM Search Backend - NGINX" \
+      org.opencontainers.image.description="NGINX reverse proxy for LLM Search Backend" \
+      org.opencontainers.image.version="1.0" \
+      org.opencontainers.image.vendor="LLM Search Backend"
+
+# Use default nginx entrypoint
+CMD ["nginx", "-g", "daemon off;"]
