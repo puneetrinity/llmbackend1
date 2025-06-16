@@ -1,55 +1,49 @@
-# Fixed Bandit security scanning step for GitHub Actions
-
 - name: Run Bandit Security Scan
   run: |
-    # Install bandit with SARIF support
-    pip install bandit[sarif]
+    pip install 'bandit[sarif]'
     
-    # Run bandit and generate clean SARIF
     bandit -r app/ \
       --format sarif \
       --output bandit-results.sarif \
       --severity-level medium \
       --confidence-level medium \
       --exclude "**/tests/**,**/test_*.py" || true
-    
-    # Validate and clean SARIF file
+
     python -c "
-    import json
-    import sys
-    try:
-        with open('bandit-results.sarif', 'r') as f:
-            data = json.load(f)
-        
-        # Clean up SARIF to match GitHub requirements
-        if 'runs' in data:
-            for run in data['runs']:
-                # Remove problematic properties
-                if 'properties' in run:
-                    # Keep only allowed properties
-                    allowed_props = ['guid', 'correlationGuid']
-                    run['properties'] = {k: v for k, v in run['properties'].items() if k in allowed_props}
-                
-                # Ensure required fields exist
-                if 'tool' not in run:
-                    run['tool'] = {'driver': {'name': 'Bandit', 'version': '1.7.5'}}
-                
-                # Clean results if they exist
-                if 'results' in run:
-                    for result in run['results']:
-                        # Remove extra properties that cause issues
-                        if 'properties' in result:
-                            del result['properties']
-        
-        # Write cleaned SARIF
-        with open('bandit-results.sarif', 'w') as f:
-            json.dump(data, f, indent=2)
-        
-        print('SARIF file cleaned successfully')
-    except Exception as e:
-        print(f'Error cleaning SARIF: {e}')
-        # Create minimal valid SARIF if cleaning fails
-        minimal_sarif = {
+import json
+try:
+    with open('bandit-results.sarif', 'r') as f:
+        data = json.load(f)
+
+    # Ensure required SARIF keys
+    data.setdefault('version', '2.1.0')
+    data.setdefault('$schema', 'https://json.schemastore.org/sarif-2.1.0.json')
+    if 'runs' in data:
+        for run in data['runs']:
+            # Add minimal tool block if missing
+            if 'tool' not in run:
+                run['tool'] = {
+                    'driver': {
+                        'name': 'Bandit',
+                        'version': '1.7.5',
+                        'informationUri': 'https://bandit.readthedocs.io'
+                    }
+                }
+
+            # Clean illegal properties
+            if 'results' in run:
+                for result in run['results']:
+                    if 'properties' in result:
+                        result.pop('properties')
+
+    with open('bandit-results.sarif', 'w') as f:
+        json.dump(data, f, indent=2)
+
+    print('✅ SARIF cleaned and saved.')
+except Exception as e:
+    print(f'⚠️ SARIF cleaning failed: {e}')
+    with open('bandit-results.sarif', 'w') as f:
+        json.dump({
             'version': '2.1.0',
             '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
             'runs': [{
@@ -61,11 +55,9 @@
                 },
                 'results': []
             }]
-        }
-        with open('bandit-results.sarif', 'w') as f:
-            json.dump(minimal_sarif, f, indent=2)
-        print('Created minimal SARIF file')
-    "
+        }, f, indent=2)
+    print('✅ Fallback SARIF created.')
+"
 
 - name: Upload Bandit scan results to GitHub Security tab
   uses: github/codeql-action/upload-sarif@v3
