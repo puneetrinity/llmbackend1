@@ -280,7 +280,7 @@ class SystemMetric(Base):
     labels = Column(JSON, nullable=True)  # Key-value pairs for metric labels
     
     # Optional additional data
-    metadata = Column(JSON, nullable=True)
+    meta_data = Column(JSON, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
