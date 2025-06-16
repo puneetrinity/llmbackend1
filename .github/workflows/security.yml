@@ -1,5 +1,17 @@
-- name: Clean and fix Bandit SARIF file
+- name: Run Bandit Security Scan and Upload SARIF
   run: |
+    echo "🚀 Installing Bandit with SARIF support..."
+    pip install 'bandit[sarif]'
+
+    echo "🔍 Running Bandit scan on app/..."
+    bandit -r app/ \
+      --format sarif \
+      --output bandit-results.sarif \
+      --severity-level medium \
+      --confidence-level medium \
+      --exclude "**/tests/**,**/test_*.py" || true
+
+    echo "🧹 Cleaning SARIF file to meet GitHub schema requirements..."
     python -c "
 import json
 
@@ -33,9 +45,10 @@ try:
 
     with open('bandit-results.sarif', 'w') as f:
         json.dump(data, f, indent=2)
-    print('✅ Cleaned SARIF and saved.')
+
+    print('✅ Cleaned and saved SARIF successfully.')
 except Exception as e:
-    print(f'⚠️ SARIF cleaning failed: {e}')
+    print(f'⚠️ Failed to clean SARIF: {e}')
     with open('bandit-results.sarif', 'w') as f:
         json.dump({
             'version': '2.1.0',
@@ -50,4 +63,12 @@ except Exception as e:
                 'results': []
             }]
         }, f, indent=2)
-    print('✅ Wrote fallback SARIF.")
+    print('✅ Fallback SARIF created.')
+"
+
+- name: Upload Bandit scan results to GitHub Security tab
+  uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: bandit-results.sarif
+    category: bandit
