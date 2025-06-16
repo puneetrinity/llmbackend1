@@ -1,97 +1,184 @@
-# LLM Search Backend
+# 🔍 LLM Search Backend
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A production-ready LLM-powered search backend that processes user queries via REST API and returns intelligent, sourced responses in 3-8 seconds.
 
-## 🎯 Features
+## 🎯 Overview
 
-- **Multi-Engine Search**: Integrates Brave Search and Bing Search APIs
-- **Intelligent Content Fetching**: Uses ZenRows for robust web scraping
-- **Local LLM Analysis**: Powered by Ollama for cost-effective AI processing
-- **Advanced Caching**: Redis + memory caching for optimal performance
-- **Cost Tracking**: Built-in budget monitoring and alerts
-- **Production Ready**: Docker containerization, health checks, monitoring
+**Architecture**: Query → API Enhancement → Multi-Search → ZenRows Content → LLM Analysis → Response
 
-## 🏗️ Architecture
-
-```
-Query → Enhancement → Multi-Search → Content Fetch → LLM Analysis → Response
-```
-
-- **Query Enhancement**: Expands queries using Bing Autosuggest and semantic patterns
-- **Multi-Search**: Parallel search across multiple engines with deduplication
-- **Content Fetching**: Smart content extraction using ZenRows + Trafilatura
-- **LLM Analysis**: Local Ollama model synthesizes results into coherent responses
-- **Caching**: Multi-layer caching reduces costs and improves speed
+This system combines multiple search engines with AI-powered content analysis to provide comprehensive, sourced answers to user queries. Built for scale with Docker, Redis caching, and production monitoring.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
 - Python 3.11+
 - Docker & Docker Compose
-- API Keys for external services
+- Git
 
-### 1. Clone and Setup
+### 1-Minute Setup
 
 ```bash
-git clone <your-repo>
+# Clone the repository
+git clone <repository-url>
 cd llm-search-backend
 
 # Copy environment template
 cp .env.example .env
-```
 
-### 2. Configure API Keys
-
-Edit `.env` file with your API keys:
-
-```bash
-# Required API Keys
-BRAVE_SEARCH_API_KEY=your_brave_api_key_here
-BING_SEARCH_API_KEY=your_bing_api_key_here
-BING_AUTOSUGGEST_API_KEY=your_bing_autosuggest_key_here
-ZENROWS_API_KEY=your_zenrows_api_key_here
-
-# Optional: Adjust settings
-DAILY_BUDGET_USD=50.0
-MAX_SOURCES_PER_QUERY=8
-```
-
-### 3. Start with Docker (Recommended)
-
-```bash
 # Start all services
-make docker-up
+make quick-start
 
-# Or manually:
-docker-compose up -d
+# Test the API
+curl "http://localhost:8000/api/v1/search?query=latest AI developments"
 ```
 
-### 4. Alternative: Local Development
+### Full Development Setup
 
 ```bash
-# Setup Python environment
-make setup
-source venv/bin/activate  # Linux/Mac
-# or: venv\Scripts\activate  # Windows
-
 # Install dependencies
 make install
 
-# Start local services (Redis, PostgreSQL, Ollama)
-docker-compose up redis db ollama -d
+# Set up environment variables
+make setup-env
 
-# Run development server
-make dev
+# Start services
+make docker-up
+
+# Run initial setup
+make setup-db
+make health-check
+
+# Run tests
+make test
 ```
 
-## 🔗 API Endpoints
+## 🏗️ System Architecture
 
-### Search Query
-```bash
-POST /api/v1/search
-Content-Type: application/json
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Load Balancer │────│   API Gateway   │────│  Rate Limiter   │
+│     (NGINX)     │    │    (FastAPI)    │    │    (Redis)      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │
+                                ▼
+                    ┌─────────────────┐
+                    │    Pipeline     │
+                    │  Orchestrator   │
+                    │   (AsyncIO)     │
+                    └─────────────────┘
+                                │
+            ┌───────────────────┼───────────────────┐
+            │                   │                   │
+            ▼                   ▼                   ▼
+    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+    │   Query     │    │   Search    │    │  Content    │
+    │ Enhancement │    │   Engine    │    │  Fetcher    │
+    │             │    │             │    │             │
+    │ - Google    │    │ - Brave API │    │ - ZenRows   │
+    │   Auto      │    │ - Bing API  │    │ - Smart     │
+    │ - Patterns  │    │ - Parallel  │    │   Extract   │
+    └─────────────┘    └─────────────┘    └─────────────┘
+            │                   │                   │
+            └───────────────────┼───────────────────┘
+                                ▼
+                    ┌─────────────────┐
+                    │      LLM        │
+                    │    Analyzer     │
+                    │                 │
+                    │ - Ollama Local  │
+                    │ - Fast Models   │
+                    │ - Synthesis     │
+                    └─────────────────┘
+                                │
+                ┌───────────────┼───────────────┐
+                ▼               ▼               ▼
+        ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+        │    Cache    │ │  Database   │ │ Monitoring  │
+        │   (Redis)   │ │(PostgreSQL) │ │  & Alerts   │
+        └─────────────┘ └─────────────┘ └─────────────┘
+```
 
+## 📁 Project Structure
+
+```
+llm-search-backend/
+├── app/
+│   ├── main.py                     # FastAPI application entry
+│   ├── config/
+│   │   ├── settings.py             # Environment configuration
+│   │   └── logging_config.py       # Logging setup
+│   ├── api/
+│   │   ├── dependencies.py         # FastAPI dependencies
+│   │   ├── middleware.py           # Custom middleware
+│   │   └── endpoints/
+│   │       ├── search.py           # Main search endpoint
+│   │       ├── health.py           # Health checks
+│   │       └── admin.py            # Admin endpoints
+│   ├── core/
+│   │   ├── pipeline.py             # Main pipeline orchestrator
+│   │   ├── exceptions.py           # Custom exceptions
+│   │   ├── security.py             # Security utilities
+│   │   └── monitoring.py           # System monitoring
+│   ├── services/
+│   │   ├── query_enhancer.py       # Query enhancement service
+│   │   ├── search_engine.py        # Multi-search engine
+│   │   ├── content_fetcher.py      # ZenRows integration
+│   │   ├── llm_analyzer.py         # LLM analysis service
+│   │   ├── cache_service.py        # Caching layer
+│   │   └── cost_tracker.py         # Cost monitoring
+│   ├── models/
+│   │   ├── requests.py             # API request models
+│   │   ├── responses.py            # API response models
+│   │   └── internal.py             # Internal data models
+│   ├── utils/
+│   │   ├── text_processing.py      # Text cleaning utilities
+│   │   ├── url_utils.py            # URL handling
+│   │   ├── validators.py           # Input validation
+│   │   └── circuit_breaker.py      # Circuit breaker pattern
+│   └── database/
+│       ├── connection.py           # DB connection setup
+│       ├── models.py               # SQLAlchemy models
+│       └── repositories.py         # Data access layer
+├── tests/
+│   ├── conftest.py                 # Pytest configuration
+│   ├── unit/                       # Unit tests
+│   ├── integration/                # Integration tests
+│   └── load/                       # Load tests
+├── scripts/
+│   ├── setup_database.py          # Database initialization
+│   ├── setup_ollama.py             # LLM model setup
+│   ├── health_check.py             # System health monitoring
+│   └── deployment/
+│       ├── deploy.sh               # Deployment script
+│       └── backup.sh               # Backup script
+├── docker/
+│   ├── Dockerfile                 # Main application container
+│   ├── Dockerfile.nginx           # NGINX container
+│   ├── docker-compose.yml         # Development setup
+│   ├── docker-compose.prod.yml    # Production setup
+│   └── nginx.conf                 # NGINX configuration
+├── kubernetes/                    # K8s deployment manifests
+├── docs/                          # Documentation
+├── alembic/                       # Database migrations
+├── .env.example                   # Environment variables template
+├── requirements.txt               # Python dependencies
+├── pyproject.toml                 # Project configuration
+└── Makefile                       # Common commands
+```
+
+## 🔌 API Documentation
+
+### Main Search Endpoint
+
+**POST** `/api/v1/search`
+
+#### Request
+```json
 {
   "query": "What are the latest developments in AI?",
   "max_results": 8,
@@ -99,12 +186,15 @@ Content-Type: application/json
 }
 ```
 
-### Response Example
+#### Response
 ```json
 {
   "query": "What are the latest developments in AI?",
-  "answer": "Recent developments in AI include...",
-  "sources": ["https://example.com/ai-news", "..."],
+  "answer": "Recent developments in AI include breakthrough advances in large language models, improved multimodal capabilities, and significant progress in AI alignment research...",
+  "sources": [
+    "https://example.com/ai-news-1",
+    "https://example.com/ai-research-2"
+  ],
   "confidence": 0.87,
   "processing_time": 4.2,
   "cached": false,
@@ -118,7 +208,95 @@ Content-Type: application/json
 - `GET /health/detailed` - Detailed system health
 - `GET /api/v1/search/suggestions?q=query` - Get search suggestions
 - `GET /api/v1/search/stats` - Pipeline statistics
-- `GET /docs` - API documentation (development mode)
+- `GET /docs` - Interactive API documentation
+
+## 🔑 Configuration
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+# API Keys
+BRAVE_SEARCH_API_KEY=your_brave_api_key
+BING_SEARCH_API_KEY=your_bing_api_key
+ZENROWS_API_KEY=your_zenrows_api_key
+
+# Database
+DATABASE_URL=postgresql+asyncpg://searchuser:searchpass@localhost:5432/searchdb
+
+# Redis Cache
+REDIS_URL=redis://localhost:6379/0
+
+# LLM Configuration
+OLLAMA_BASE_URL=http://localhost:11434
+LLM_MODEL=llama2:7b
+
+# Performance Settings
+WORKER_COUNT=4
+CACHE_TTL=3600
+MAX_CONCURRENT_REQUESTS=100
+REQUEST_TIMEOUT=30
+
+# Security
+SECRET_KEY=your_secret_key_here
+ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
+```
+
+### API Key Setup
+
+#### 1. Brave Search API
+1. Sign up at [Brave Search API](https://api.search.brave.com/)
+2. Get your API key from the dashboard
+3. Add to `.env`: `BRAVE_SEARCH_API_KEY=your_key`
+
+#### 2. Bing Search API
+1. Create account at [Azure Cognitive Services](https://portal.azure.com/)
+2. Create "Bing Search v7" resource
+3. Add keys to `.env`: `BING_SEARCH_API_KEY=your_key`
+
+#### 3. ZenRows API
+1. Sign up at [ZenRows](https://www.zenrows.com/)
+2. Get API key from dashboard
+3. Add to `.env`: `ZENROWS_API_KEY=your_key`
+
+## 🐳 Docker Deployment
+
+### Development
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Production
+```bash
+# Build and deploy
+docker-compose -f docker-compose.prod.yml up -d
+
+# Scale API service
+docker-compose -f docker-compose.prod.yml up -d --scale api=3
+
+# Health check
+curl http://localhost/health
+```
+
+### Kubernetes Deployment
+```bash
+# Deploy to Kubernetes
+kubectl apply -f kubernetes/
+
+# Check status
+kubectl get pods -n llm-search
+
+# View logs
+kubectl logs -f deployment/api -n llm-search
+```
 
 ## 🛠️ Development
 
@@ -127,154 +305,104 @@ Content-Type: application/json
 ```bash
 make help              # Show all available commands
 make dev               # Start development server
-make test              # Run tests
+make install           # Install dependencies
+make test              # Run all tests
+make test-unit         # Run unit tests only
+make test-integration  # Run integration tests
+make test-load         # Run load tests
 make lint              # Run code linting
 make format            # Format code
+make type-check        # Run type checking
 make docker-up         # Start all services
+make docker-down       # Stop all services
 make docker-logs       # View logs
+make db-migrate        # Run database migrations
+make db-upgrade        # Upgrade database
+make db-downgrade      # Downgrade database
 make clean             # Clean temporary files
+make setup-env         # Setup environment
+make health-check      # Run health checks
 ```
 
-### Project Structure
+### Development Workflow
 
-```
-app/
-├── main.py                    # FastAPI application entry
-├── config/settings.py         # Configuration management
-├── core/pipeline.py           # Main pipeline orchestrator
-├── services/                  # Business logic services
-│   ├── query_enhancer.py      # Query enhancement
-│   ├── search_engine.py       # Multi-search engine
-│   ├── content_fetcher.py     # Content fetching
-│   ├── llm_analyzer.py        # LLM analysis
-│   ├── cache_service.py       # Caching layer
-│   └── cost_tracker.py        # Cost monitoring
-├── api/endpoints/             # API endpoints
-├── models/                    # Data models
-└── utils/                     # Utility functions
-```
+1. **Setup Development Environment**
+   ```bash
+   make install
+   make setup-env
+   make docker-up
+   ```
 
-## 🔑 API Key Setup
+2. **Make Changes & Test**
+   ```bash
+   make test
+   make lint
+   make type-check
+   ```
 
-### 1. Brave Search API
-- Sign up at [Brave Search API](https://api.search.brave.com/)
-- Get your API key from the dashboard
-- Add to `.env`: `BRAVE_SEARCH_API_KEY=your_key`
+3. **Test Integration**
+   ```bash
+   make test-integration
+   make health-check
+   ```
 
-### 2. Bing Search API
-- Create account at [Azure Cognitive Services](https://portal.azure.com/)
-- Create "Bing Search v7" resource
-- Add keys to `.env`:
-  - `BING_SEARCH_API_KEY=your_key`
-  - `BING_AUTOSUGGEST_API_KEY=your_key`
-
-### 3. ZenRows API
-- Sign up at [ZenRows](https://www.zenrows.com/)
-- Get API key from dashboard
-- Add to `.env`: `ZENROWS_API_KEY=your_key`
-
-## 🐳 Docker Deployment
-
-### Development
-```bash
-docker-compose up -d
-```
-
-### Production
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### With Management Tools
-```bash
-docker-compose --profile tools up -d
-# Access pgAdmin: http://localhost:8080
-# Access Redis Commander: http://localhost:8081
-```
-
-## 📊 Monitoring & Cost Management
-
-### Cost Tracking
-The system tracks costs for all external API calls:
-
-- **Brave Search**: ~$0.005 per search
-- **Bing Search**: ~$0.003 per search
-- **ZenRows**: ~$0.01 per request
-- **LLM**: Free (local Ollama)
-
-### Monitoring Endpoints
-- `GET /health/detailed` - Component health status
-- `GET /api/v1/search/stats` - Usage statistics
-- `GET /api/v1/search/cost/{request_id}` - Request cost breakdown
-
-### Budget Controls
-Set daily limits in `.env`:
-```bash
-DAILY_BUDGET_USD=50.0
-ZENROWS_MONTHLY_BUDGET=200.0
-MAX_SOURCES_PER_QUERY=8
-RATE_LIMIT_PER_MINUTE=60
-```
-
-## ⚡ Performance Optimization
-
-### Caching Strategy
-- **Memory Cache**: Immediate responses for repeated queries
-- **Redis Cache**: Distributed caching across instances
-- **Query Enhancement Cache**: 1 hour TTL
-- **Search Results Cache**: 30 minutes TTL
-- **Final Responses Cache**: 4 hours TTL
-
-### Performance Targets
-- **Fresh requests**: 5-8 seconds
-- **Cached responses**: 100-500ms
-- **Average (70% cache hit)**: 2-3 seconds
-- **Concurrent users**: 500+
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `API_HOST` | API server host | `0.0.0.0` |
-| `API_PORT` | API server port | `8000` |
-| `DEBUG` | Debug mode | `false` |
-| `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
-| `LLM_MODEL` | LLM model name | `llama2:7b` |
-| `REDIS_URL` | Redis connection URL | `redis://localhost:6379` |
-| `RATE_LIMIT_PER_MINUTE` | API rate limit | `60` |
-
-### LLM Configuration
-
-```bash
-# Ollama settings
-OLLAMA_HOST=http://localhost:11434
-LLM_MODEL=llama2:7b           # or mistral:7b, codellama:7b
-LLM_MAX_TOKENS=500
-LLM_TEMPERATURE=0.1
-LLM_TIMEOUT=30
-```
+4. **Performance Testing**
+   ```bash
+   make test-load
+   ```
 
 ## 🧪 Testing
 
-### Run Tests
+### Test Suite Coverage
+
+- **Unit Tests**: Individual service testing
+- **Integration Tests**: End-to-end pipeline testing
+- **Load Tests**: Performance and scalability
+- **API Tests**: Endpoint validation
+- **Database Tests**: Data persistence and queries
+
+### Running Tests
+
 ```bash
-make test                     # Run all tests
-pytest tests/unit/           # Unit tests only
-pytest tests/integration/    # Integration tests only
+# All tests
+make test
+
+# Specific test categories
+make test-unit
+make test-integration
+make test-load
+
+# With coverage
+make test-coverage
+
+# Specific test file
+pytest tests/unit/test_query_enhancer.py -v
 ```
 
-### Manual Testing
-```bash
-# Test basic search
-curl -X POST http://localhost:8000/api/v1/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Python programming", "max_results": 5}'
+## 📊 Monitoring & Observability
 
-# Test health check
-curl http://localhost:8000/health/detailed
-```
+### Health Checks
+- `/health` - Basic service health
+- `/health/detailed` - Detailed component status
+- Database connectivity
+- Redis connectivity
+- Ollama service status
+- External API availability
+
+### Metrics
+- Request count and latency
+- Cache hit/miss ratios
+- LLM processing times
+- Cost tracking per request
+- Error rates by service
+- Memory and CPU usage
+
+### Logging
+- Structured JSON logging
+- Request/response logging
+- Error tracking with stack traces
+- Performance metrics
+- Cost tracking
 
 ## 🚨 Troubleshooting
 
@@ -324,36 +452,73 @@ docker-compose logs -f redis
 docker-compose logs -f ollama
 ```
 
-## 📈 Scaling
-
-### Horizontal Scaling
-- Use Docker Swarm or Kubernetes
-- Add load balancer (NGINX included)
-- Scale API service instances
-- Use Redis Cluster for caching
+## 📈 Performance & Scaling
 
 ### Performance Tuning
 - Adjust worker counts in Docker
 - Tune cache TTL values
 - Optimize LLM model size
 - Implement request queuing
+- Configure connection pools
+
+### Horizontal Scaling
+- Use Docker Swarm or Kubernetes
+- Add load balancer (NGINX included)
+- Scale API service instances
+- Use Redis Cluster for caching
+- Database read replicas
+
+### Benchmarks
+- **Target Response Time**: 3-8 seconds
+- **Throughput**: 100+ concurrent requests
+- **Cache Hit Rate**: 70%+
+- **Uptime**: 99.9%
 
 ## 🔒 Security
 
 ### API Security
 - Rate limiting per user/IP
 - Request size limits
-- Input validation
+- Input validation and sanitization
 - API key authentication (extensible)
+- CORS configuration
 
 ### Production Security
 - Use secrets management
-- Enable HTTPS
+- Enable HTTPS/TLS
 - Network isolation
 - Regular security updates
+- Dependency vulnerability scanning
+
+### Data Privacy
+- No persistent storage of user queries
+- Configurable data retention
+- API key encryption
+- Audit logging
+
+## 💰 Cost Management
+
+### Cost Tracking
+- Per-request cost calculation
+- Daily/monthly budget monitoring
+- API usage analytics
+- Cost optimization recommendations
+
+### Budget Controls
+- Request rate limiting
+- Cache-first strategies
+- Model selection optimization
+- Alert thresholds
 
 ## 📚 Additional Resources
 
+### Documentation
+- [API Documentation](./docs/api_documentation.md)
+- [Deployment Guide](./docs/deployment_guide.md)
+- [Performance Tuning](./docs/performance_tuning.md)
+- [Troubleshooting Guide](./docs/troubleshooting.md)
+
+### External Documentation
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Ollama Documentation](https://ollama.ai/docs)
 - [ZenRows Documentation](https://www.zenrows.com/docs)
@@ -367,10 +532,40 @@ docker-compose logs -f ollama
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open Pull Request
 
+### Code Standards
+- Follow PEP 8 style guidelines
+- Add type hints to all functions
+- Write comprehensive tests
+- Update documentation
+- Add docstrings to all classes/functions
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 🎯 Roadmap
+
+### Phase 1 (Completed)
+- ✅ Core pipeline implementation
+- ✅ Multi-search engine integration
+- ✅ LLM analysis and synthesis
+- ✅ Caching and optimization
+- ✅ Docker deployment
+
+### Phase 2 (In Progress)
+- 🔄 Advanced query understanding
+- 🔄 Multi-language support
+- 🔄 Enhanced monitoring
+- 🔄 Cost optimization
+
+### Phase 3 (Planned)
+- 📋 Real-time search updates
+- 📋 Custom model fine-tuning
+- 📋 Advanced analytics dashboard
+- 📋 Enterprise features
+
 ---
 
 **Ready to get started?** Run `make quick-start` and follow the setup instructions!
+
+For questions or support, please open an issue or check our [documentation](./docs/).
