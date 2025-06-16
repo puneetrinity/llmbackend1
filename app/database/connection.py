@@ -1,12 +1,10 @@
-# app/database/connection.py
+# app/database/connection.py - Fixed with optional database support
 import logging
-from typing import AsyncGenerator, Optional
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from typing import Optional, AsyncGenerator
+from sqlalchemy import create_engine, event
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import event
-from sqlalchemy.pool import NullPool
-import asyncio
-
+from sqlalchemy.pool import StaticPool
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -15,97 +13,130 @@ logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 class DatabaseManager:
-    """Database connection and session management"""
-    
     def __init__(self):
         self.engine = None
-        self.async_session_factory = None
-        self._is_initialized = False
+        self.async_engine = None
+        self.session_factory = None
+        self.is_available = False
+        self._initialize_engine()
     
-    async def initialize(self):
-        """Initialize database connection"""
-        if self._is_initialized:
-            return
-            
+    def _initialize_engine(self):
+        """Initialize database engine with error handling"""
         try:
-            # Create async engine
-            self.engine = create_async_engine(
-                settings.DATABASE_URL,
-                echo=settings.DEBUG,  # Log SQL queries in debug mode
-                pool_pre_ping=True,   # Verify connections before use
-                pool_recycle=3600,    # Recycle connections after 1 hour
-                pool_size=20,         # Connection pool size
-                max_overflow=30,      # Maximum overflow connections
-                poolclass=NullPool if settings.DEBUG else None,  # No pooling in debug
-                connect_args={
-                    "server_settings": {
-                        "application_name": "llm_search_backend",
-                    }
-                }
-            )
+            database_url = settings.DATABASE_URL
+            
+            # Skip database if URL is not properly configured
+            if not database_url or database_url == "postgresql://user:pass@localhost:5432/searchdb":
+                logger.warning("⚠️ Database URL not configured, running without database")
+                return
+            
+            # For SQLite, use synchronous engine
+            if database_url.startswith("sqlite"):
+                self.engine = create_engine(
+                    database_url,
+                    poolclass=StaticPool,
+                    connect_args={"check_same_thread": False},
+                    echo=settings.DEBUG
+                )
+                # Create async engine for SQLite
+                async_url = database_url.replace("sqlite://", "sqlite+aiosqlite://")
+                self.async_engine = create_async_engine(
+                    async_url,
+                    poolclass=StaticPool,
+                    connect_args={"check_same_thread": False},
+                    echo=settings.DEBUG
+                )
+            
+            # For PostgreSQL
+            elif database_url.startswith("postgresql"):
+                # Sync engine
+                self.engine = create_engine(
+                    database_url,
+                    pool_pre_ping=True,
+                    echo=settings.DEBUG
+                )
+                # Async engine
+                async_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
+                if not async_url.startswith("postgresql+asyncpg://"):
+                    async_url = database_url.replace("postgresql", "postgresql+asyncpg")
+                
+                self.async_engine = create_async_engine(
+                    async_url,
+                    pool_pre_ping=True,
+                    echo=settings.DEBUG
+                )
+            
+            else:
+                logger.error(f"❌ Unsupported database URL: {database_url}")
+                return
             
             # Create session factory
-            self.async_session_factory = async_sessionmaker(
-                bind=self.engine,
-                class_=AsyncSession,
-                expire_on_commit=False,
-                autocommit=False,
-                autoflush=False
-            )
+            if self.async_engine:
+                self.session_factory = async_sessionmaker(
+                    self.async_engine,
+                    class_=AsyncSession,
+                    expire_on_commit=False
+                )
             
             # Test connection
-            async with self.engine.begin() as conn:
-                await conn.execute("SELECT 1")
-            
-            self._is_initialized = True
-            logger.info("Database connection initialized successfully")
+            self._test_connection()
+            self.is_available = True
+            logger.info("✅ Database connection established")
             
         except Exception as e:
-            logger.error(f"Failed to initialize database: {e}")
-            raise
-    
-    async def create_tables(self):
-        """Create all database tables"""
-        try:
-            async with self.engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database tables created successfully")
-        except Exception as e:
-            logger.error(f"Failed to create tables: {e}")
-            raise
-    
-    async def drop_tables(self):
-        """Drop all database tables (use with caution!)"""
-        try:
-            async with self.engine.begin() as conn:
-                await conn.run_sync(Base.metadata.drop_all)
-            logger.info("Database tables dropped successfully")
-        except Exception as e:
-            logger.error(f"Failed to drop tables: {e}")
-            raise
-    
+            logger.warning(f"⚠️ Database initialization failed: {e}")
+            logger.warning("⚠️ Application will run without database functionality")
+            self.is_available = False
+
+    def _test_connection(self):
+        """Test database connection"""
+        if self.engine:
+            try:
+                with self.engine.connect() as conn:
+                    conn.execute("SELECT 1")
+                logger.info("✅ Database connection test successful")
+            except Exception as e:
+                logger.warning(f"⚠️ Database connection test failed: {e}")
+                raise
+
     async def get_session(self) -> AsyncSession:
-        """Get database session"""
-        if not self._is_initialized:
-            await self.initialize()
-        
-        return self.async_session_factory()
-    
+        """Get async database session"""
+        if not self.is_available or not self.session_factory:
+            raise RuntimeError("Database is not available")
+        return self.session_factory()
+
     async def close(self):
         """Close database connections"""
+        if self.async_engine:
+            await self.async_engine.dispose()
         if self.engine:
-            await self.engine.dispose()
-            logger.info("Database connections closed")
+            self.engine.dispose()
 
-# Global database manager instance
+# Create global database manager
 db_manager = DatabaseManager()
 
+# Only set up event listeners if engine is available
+if db_manager.engine is not None:
+    @event.listens_for(db_manager.engine, "connect", once=True)
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        """Set SQLite pragmas for better performance"""
+        if 'sqlite' in str(dbapi_connection):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency for getting database session"""
+    """Dependency to get database session"""
+    if not db_manager.is_available:
+        # Return a mock session that does nothing
+        yield None
+        return
+    
     async with db_manager.get_session() as session:
         try:
             yield session
-            await session.commit()
         except Exception:
             await session.rollback()
             raise
@@ -113,33 +144,53 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 async def init_database():
-    """Initialize database on startup"""
-    await db_manager.initialize()
-    await db_manager.create_tables()
+    """Initialize database tables"""
+    if not db_manager.is_available:
+        logger.warning("⚠️ Skipping database initialization - database not available")
+        return
+    
+    try:
+        # Import models to ensure they're registered
+        from app.database import models  # noqa: F401
+        
+        if db_manager.async_engine:
+            async with db_manager.async_engine.begin() as conn:
+                # Create all tables
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("✅ Database tables initialized")
+        else:
+            logger.warning("⚠️ No async engine available for database initialization")
+            
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        # Don't raise the error - let the app continue without database
 
 async def close_database():
-    """Close database on shutdown"""
-    await db_manager.close()
+    """Close database connections"""
+    try:
+        await db_manager.close()
+        logger.info("✅ Database connections closed")
+    except Exception as e:
+        logger.error(f"❌ Error closing database: {e}")
 
-# Event listeners for connection handling
-@event.listens_for(db_manager.engine, "connect", once=True)
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Set SQLite pragmas if using SQLite"""
-    if "sqlite" in settings.DATABASE_URL:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-@event.listens_for(db_manager.engine, "before_cursor_execute")
-def receive_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    """Log slow queries in debug mode"""
-    if settings.DEBUG:
-        context._query_start_time = asyncio.get_event_loop().time()
-
-@event.listens_for(db_manager.engine, "after_cursor_execute")
-def receive_after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    """Log query execution time"""
-    if settings.DEBUG and hasattr(context, '_query_start_time'):
-        total = asyncio.get_event_loop().time() - context._query_start_time
-        if total > 0.1:  # Log queries taking more than 100ms
-            logger.warning(f"Slow query ({total:.3f}s): {statement[:100]}...")
+# Health check function
+async def check_database_health() -> dict:
+    """Check database health"""
+    if not db_manager.is_available:
+        return {
+            "status": "unavailable",
+            "message": "Database not configured"
+        }
+    
+    try:
+        async with db_manager.get_session() as session:
+            result = await session.execute("SELECT 1")
+            return {
+                "status": "healthy",
+                "message": "Database connection successful"
+            }
+    except Exception as e:
+        return {
+            "status": "unhealthy", 
+            "message": f"Database error: {str(e)}"
+        }
