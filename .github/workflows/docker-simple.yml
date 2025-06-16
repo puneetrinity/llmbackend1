@@ -1,0 +1,53 @@
+# .github/workflows/docker-simple.yml
+name: Build Docker Images (Simple)
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # Build main application image
+  build-app:
+    name: Build Application
+    uses: ./.github/workflows/reusable-docker-build.yml
+    with:
+      image_name: 'app'
+      dockerfile_path: 'Dockerfile'
+      build_context: '.'
+      platforms: 'linux/amd64,linux/arm64'
+      push_to_registry: ${{ github.event_name != 'pull_request' }}
+      run_tests: true
+    secrets: inherit
+
+  # Build nginx image
+  build-nginx:
+    name: Build NGINX
+    uses: ./.github/workflows/reusable-docker-build.yml
+    with:
+      image_name: 'nginx'
+      dockerfile_path: 'docker/Dockerfile.nginx'
+      build_context: '.'
+      platforms: 'linux/amd64,linux/arm64'
+      push_to_registry: ${{ github.event_name != 'pull_request' }}
+      run_tests: false
+    secrets: inherit
+
+  # Notify on completion
+  notify:
+    name: Notify Build Complete
+    runs-on: ubuntu-latest
+    needs: [build-app, build-nginx]
+    if: always()
+    
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Status | Image |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Application | ${{ needs.build-app.result == 'success' && '✅ Success' || '❌ Failed' }} | \`ghcr.io/${{ github.repository }}/app:${{ needs.build-app.outputs.image_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| NGINX | ${{ needs.build-nginx.result == 'success' && '✅ Success' || '❌ Failed' }} | \`ghcr.io/${{ github.repository }}/nginx:${{ needs.build-nginx.outputs.image_version }}\` |" >> $GITHUB_STEP_SUMMARY
