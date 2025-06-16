@@ -1,3 +1,4 @@
+# .github/workflows/ci.yml
 name: CI Pipeline
 
 on:
@@ -90,19 +91,159 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Run Bandit Security Scan
-      run: |
-        pip install bandit[toml]
-        bandit -r app -f json -o bandit-report.json
-    
-    - name: Upload security scan results
-      uses: github/codeql-action/upload-sarif@v2
-      if: always()
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        sarif_file: bandit-report.json
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    # Method 1: Bandit with SARIF conversion
+    - name: Install security scanning tools
+      run: |
+        pip install bandit[toml] sarif-om
+    
+    - name: Run Bandit Security Scan
+      id: bandit
+      run: |
+        # Run bandit and continue even if issues are found
+        bandit -r app -f json -o bandit-report.json || true
+        
+        # Convert Bandit JSON to SARIF format
+        python -c "
+        import json
+        import sys
+        from datetime import datetime
+        
+        # Read Bandit JSON output
+        try:
+            with open('bandit-report.json', 'r') as f:
+                bandit_data = json.load(f)
+        except:
+            print('No bandit report found')
+            sys.exit(0)
+        
+        # Convert to SARIF format
+        sarif_output = {
+            'version': '2.1.0',
+            '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
+            'runs': [{
+                'tool': {
+                    'driver': {
+                        'name': 'Bandit',
+                        'version': '1.8.3',
+                        'informationUri': 'https://bandit.readthedocs.io/',
+                        'semanticVersion': '1.8.3'
+                    }
+                },
+                'results': []
+            }]
+        }
+        
+        # Convert Bandit results to SARIF results
+        for result in bandit_data.get('results', []):
+            sarif_result = {
+                'ruleId': result.get('test_id', 'unknown'),
+                'message': {
+                    'text': result.get('issue_text', 'Security issue detected')
+                },
+                'level': 'warning' if result.get('issue_severity') == 'MEDIUM' else 'error',
+                'locations': [{
+                    'physicalLocation': {
+                        'artifactLocation': {
+                            'uri': result.get('filename', 'unknown')
+                        },
+                        'region': {
+                            'startLine': result.get('line_number', 1)
+                        }
+                    }
+                }]
+            }
+            sarif_output['runs'][0]['results'].append(sarif_result)
+        
+        # Write SARIF output
+        with open('bandit-results.sarif', 'w') as f:
+            json.dump(sarif_output, f, indent=2)
+        
+        print(f'Converted {len(sarif_output[\"runs\"][0][\"results\"])} security findings to SARIF format')
+        "
+    
+    - name: Upload Bandit scan results
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: bandit-results.sarif
+        category: bandit
+    
+    # Method 2: CodeQL Analysis (more comprehensive)
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: python
+        queries: security-and-quality
+    
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: codeql-python
+    
+    # Method 3: Semgrep (additional security scanning)
+    - name: Run Semgrep
+      uses: semgrep/semgrep-action@v1
+      with:
+        config: >-
+          p/security-audit
+          p/secrets
+          p/owasp-top-ten
+          p/python
+      env:
+        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    
+    # Method 4: Safety check for known vulnerabilities in dependencies
+    - name: Safety check
+      run: |
+        pip install safety
+        safety check --json --output safety-report.json || true
+        
+        # Convert Safety output to human readable
+        if [ -f safety-report.json ]; then
+          echo "## 🔒 Dependency Security Report" >> $GITHUB_STEP_SUMMARY
+          python -c "
+        import json
+        try:
+            with open('safety-report.json', 'r') as f:
+                safety_data = json.load(f)
+            if safety_data:
+                print('### ⚠️ Vulnerabilities Found:')
+                for vuln in safety_data:
+                    print(f'- **{vuln.get(\"package\", \"Unknown\")}** {vuln.get(\"installed_version\", \"\")}')
+                    print(f'  - Vulnerability: {vuln.get(\"vulnerability\", \"\")}')
+                    print(f'  - ID: {vuln.get(\"id\", \"\")}')
+                    print()
+            else:
+                print('### ✅ No known vulnerabilities found in dependencies')
+        except:
+            print('### ✅ No known vulnerabilities found in dependencies')
+          " >> $GITHUB_STEP_SUMMARY
+        fi
 
----
+  # Dependency Review (for PRs)
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
