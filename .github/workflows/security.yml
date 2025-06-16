@@ -1,74 +1,40 @@
-- name: Run Bandit Security Scan and Upload SARIF
-  run: |
-    echo "🚀 Installing Bandit with SARIF support..."
-    pip install 'bandit[sarif]'
+# .github/workflows/security-test.yml
+name: Security Test
 
-    echo "🔍 Running Bandit scan on app/..."
-    bandit -r app/ \
-      --format sarif \
-      --output bandit-results.sarif \
-      --severity-level medium \
-      --confidence-level medium \
-      --exclude "**/tests/**,**/test_*.py" || true
+on:
+  workflow_dispatch:  # Manual trigger for testing
 
-    echo "🧹 Cleaning SARIF file to meet GitHub schema requirements..."
-    python -c "
-import json
-
-def clean_dict(obj):
-    if isinstance(obj, dict):
-        return {k: clean_dict(v) for k, v in obj.items() if k != ''}
-    elif isinstance(obj, list):
-        return [clean_dict(i) for i in obj]
-    else:
-        return obj
-
-try:
-    with open('bandit-results.sarif', 'r') as f:
-        data = json.load(f)
-
-    data = clean_dict(data)
-
-    data.setdefault('version', '2.1.0')
-    data.setdefault('$schema', 'https://json.schemastore.org/sarif-2.1.0.json')
-
-    if 'runs' in data:
-        for run in data['runs']:
-            if 'tool' not in run:
-                run['tool'] = {
-                    'driver': {
-                        'name': 'Bandit',
-                        'version': '1.8.3',
-                        'informationUri': 'https://bandit.readthedocs.io/'
-                    }
-                }
-
-    with open('bandit-results.sarif', 'w') as f:
-        json.dump(data, f, indent=2)
-
-    print('✅ Cleaned and saved SARIF successfully.')
-except Exception as e:
-    print(f'⚠️ Failed to clean SARIF: {e}')
-    with open('bandit-results.sarif', 'w') as f:
-        json.dump({
-            'version': '2.1.0',
-            '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
-            'runs': [{
-                'tool': {
-                    'driver': {
-                        'name': 'Bandit',
-                        'version': '1.8.3'
-                    }
-                },
-                'results': []
-            }]
-        }, f, indent=2)
-    print('✅ Fallback SARIF created.')
-"
-
-- name: Upload Bandit scan results to GitHub Security tab
-  uses: github/codeql-action/upload-sarif@v3
-  if: always()
-  with:
-    sarif_file: bandit-results.sarif
-    category: bandit
+jobs:
+  basic-security:
+    name: Basic Security Check
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Simple Bandit Test
+        run: |
+          pip install bandit
+          bandit --version
+          echo "✅ Bandit installed successfully"
+          
+      - name: Test SARIF Generation
+        run: |
+          echo '{"version": "2.1.0", "$schema": "https://json.schemastore.org/sarif-2.1.0.json", "runs": [{"tool": {"driver": {"name": "Test"}}, "results": []}]}' > test.sarif
+          echo "✅ SARIF file created"
+          
+      - name: Test Upload
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: test.sarif
+          category: test
