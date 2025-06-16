@@ -1,0 +1,346 @@
+# .github/workflows/docker-build.yml
+name: Build and Push Docker Images
+
+on:
+  # Trigger on push to main branch
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  
+  # Trigger on pull requests
+  pull_request:
+    branches: [ main ]
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: 'Push image to registry'
+        required: false
+        default: 'true'
+        type: boolean
+      platforms:
+        description: 'Target platforms'
+        required: false
+        default: 'linux/amd64,linux/arm64'
+        type: string
+
+env:
+  # Registry settings
+  REGISTRY_DOCKER: docker.io
+  REGISTRY_GHCR: ghcr.io
+  
+  # Image settings
+  IMAGE_NAME: llm-search-backend
+  
+  # Build settings
+  DOCKERFILE_PATH: ./Dockerfile
+  BUILD_CONTEXT: .
+
+jobs:
+  # Job 1: Build and test image
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - name: main
+            dockerfile: Dockerfile
+            context: .
+            platforms: linux/amd64,linux/arm64
+          - name: nginx
+            dockerfile: docker/Dockerfile.nginx
+            context: .
+            platforms: linux/amd64,linux/arm64
+    
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-metadata: ${{ steps.meta.outputs.json }}
+      
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better caching
+      
+      # Step 2: Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+            
+      # Step 3: Set up QEMU for multi-platform builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+      
+      # Step 4: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_DOCKER }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      # Step 5: Log in to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Step 6: Extract metadata
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_DOCKER }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-${{ matrix.name }}
+            ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/${{ matrix.name }}
+          tags: |
+            # Branch-based tags
+            type=ref,event=branch
+            type=ref,event=pr
+            
+            # Semantic version tags
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            
+            # Special tags
+            type=edge,branch=main
+            type=raw,value=latest,enable={{is_default_branch}}
+            
+            # SHA tags
+            type=sha,prefix={{branch}}-
+          labels: |
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}-${{ matrix.name }}
+            org.opencontainers.image.description=LLM Search Backend - ${{ matrix.name }} service
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+      
+      # Step 7: Build and push Docker image
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ github.event.inputs.platforms || matrix.platforms }}
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          
+          # Build arguments
+          build-args: |
+            BUILDTIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+            REVISION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
+          
+          # Caching
+          cache-from: |
+            type=gha,scope=${{ github.workflow }}-${{ matrix.name }}
+            type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ github.repository }}/${{ matrix.name }}:cache
+          cache-to: |
+            type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.name }}
+            type=registry,ref=${{ env.REGISTRY_GHCR }}/${{ github.repository }}/${{ matrix.name }}:cache,mode=max
+          
+          # Outputs
+          outputs: type=image,name=target,annotation-index.org.opencontainers.image.description=${{ matrix.name }} service image
+      
+      # Step 8: Run vulnerability scan
+      - name: Run Trivy vulnerability scanner
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/${{ matrix.name }}:${{ steps.meta.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.name }}.sarif'
+      
+      # Step 9: Upload Trivy scan results
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-${{ matrix.name }}.sarif'
+
+  # Job 2: Test the built image
+  test:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    
+    strategy:
+      matrix:
+        test-type: [health, api, integration]
+    
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      # Step 3: Log in to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Step 4: Extract image metadata
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/main
+      
+      # Step 5: Health check test
+      - name: Test - Health Check
+        if: matrix.test-type == 'health'
+        run: |
+          echo "Testing health check endpoint..."
+          docker run --rm -d --name test-container \
+            -p 8000:8000 \
+            ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/main:${{ fromJSON(needs.build.outputs.image-metadata).labels['org.opencontainers.image.version'] }}
+          
+          # Wait for container to start
+          sleep 30
+          
+          # Test health endpoint
+          curl -f http://localhost:8000/health || exit 1
+          
+          # Cleanup
+          docker stop test-container
+      
+      # Step 6: API test
+      - name: Test - API Endpoints
+        if: matrix.test-type == 'api'
+        run: |
+          echo "Testing API endpoints..."
+          docker run --rm -d --name test-api \
+            -p 8001:8000 \
+            -e DEBUG=true \
+            ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/main:${{ fromJSON(needs.build.outputs.image-metadata).labels['org.opencontainers.image.version'] }}
+          
+          # Wait for container
+          sleep 30
+          
+          # Test API info endpoint
+          curl -f http://localhost:8001/api/v1/info || exit 1
+          
+          # Cleanup
+          docker stop test-api
+      
+      # Step 7: Integration test
+      - name: Test - Integration
+        if: matrix.test-type == 'integration'
+        run: |
+          echo "Running integration tests..."
+          docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+          docker-compose -f docker-compose.test.yml down
+
+  # Job 3: Deploy to staging (optional)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    environment:
+      name: staging
+      url: https://staging.yourdomain.com
+    
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          echo "Image: ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/main:${{ fromJSON(needs.build.outputs.image-metadata).labels['org.opencontainers.image.version'] }}"
+          
+          # Add your deployment commands here
+          # For example, using SSH to update containers:
+          # ssh user@staging-server "docker pull $IMAGE && docker-compose up -d"
+
+  # Job 4: Create release (for tags)
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      # Step 2: Generate changelog
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Simple changelog generation
+          if [ -f CHANGELOG.md ]; then
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            sed -n '/^## \[/,/^## \[/p' CHANGELOG.md | head -n -1 >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "changelog=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+      
+      # Step 3: Create GitHub release
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## Docker Images
+            
+            **Main Application:**
+            - `docker pull ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/main:${{ github.ref_name }}`
+            - `docker pull ${{ env.REGISTRY_DOCKER }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-main:${{ github.ref_name }}`
+            
+            **NGINX:**
+            - `docker pull ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/nginx:${{ github.ref_name }}`
+            - `docker pull ${{ env.REGISTRY_DOCKER }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-nginx:${{ github.ref_name }}`
+            
+            ## Changelog
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Verification
+            ```bash
+            # Verify image signature
+            docker trust inspect ${{ env.REGISTRY_GHCR }}/${{ github.repository }}/main:${{ github.ref_name }}
+            ```
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  # Job 5: Cleanup old images
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      # Step 1: Delete old packages
+      - name: Delete old container images
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: llm-search-backend/main
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: true
