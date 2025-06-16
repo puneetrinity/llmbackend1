@@ -1,4 +1,4 @@
-ROM python:3.11-slim as builder
+FROM python:3.11-slim as builder
 
 # Build arguments
 ARG BUILDTIME
