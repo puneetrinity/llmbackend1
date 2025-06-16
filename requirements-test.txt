@@ -23,8 +23,8 @@ mypy==1.8.0
 safety==3.0.1  # Updated from 2.3.5 - now compatible with packaging>=22.0
 bandit==1.7.5
 
-# Documentation testing
-doctest==0.0.1
+# Documentation testing (doctest is built-in to Python)
+# doctest - built-in module, no installation needed
 
 # Performance testing
 locust==2.17.0
