@@ -1,0 +1,106 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP & Async
+aiohttp==3.9.1
+httpx==0.25.2
+requests==2.31.0
+aiofiles==23.2.0
+
+# Database & ORM
+sqlalchemy==2.0.23
+alembic==1.12.1
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+greenlet==3.0.1
+
+# Cache & Redis
+redis==5.0.1
+aioredis==2.0.1
+
+# Content Processing & Web Scraping
+beautifulsoup4==4.12.2
+trafilatura==1.6.4
+lxml==4.9.3
+html5lib==1.1
+
+# Data Processing
+python-multipart==0.0.6
+pandas==2.1.4
+numpy==1.24.4
+
+# Monitoring & Logging
+structlog==23.2.0
+prometheus-client==0.19.0
+python-json-logger==2.0.7
+
+# Security & Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+cryptography==41.0.8
+
+# Environment & Configuration
+python-dotenv==1.0.0
+click==8.1.7
+
+# Date & Time
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Text Processing
+nltk==3.8.1
+regex==2023.10.3
+
+# HTTP utilities
+urllib3==2.1.0
+chardet==5.2.0
+
+# JSON & Data Serialization
+orjson==3.9.10
+msgpack==1.0.7
+
+# Performance & Profiling
+psutil==5.9.6
+memory-profiler==0.61.0
+
+# Database Utilities
+faker==20.1.0
+sqlalchemy-utils==0.41.1
+
+# Development & Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+httpx==0.25.2
+factory-boy==3.3.0
+
+# Code Quality
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+mypy==1.7.1
+bandit==1.7.5
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.4.8
+
+# Utilities
+python-slugify==8.0.1
+validators==0.22.0
+user-agents==2.2.0
+
+# Optional: For enhanced text processing
+# spacy==3.7.2
+# transformers==4.35.2
+
+# Production WSGI server (alternative to uvicorn)
+# gunicorn==21.2.0
+
+# Monitoring (optional)
+# sentry-sdk[fastapi]==1.38.0
+# newrelic==9.2.0

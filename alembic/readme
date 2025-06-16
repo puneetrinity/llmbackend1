@@ -1,0 +1,102 @@
+# Database Migrations
+
+This directory contains Alembic database migration scripts for the LLM Search Backend.
+
+## Directory Structure
+
+- `versions/` - Contains all migration scripts
+- `env.py` - Alembic environment configuration
+- `script.py.mako` - Template for new migration scripts
+
+## Common Migration Commands
+
+### Using the management script (recommended):
+
+```bash
+# Create a new migration
+python scripts/manage_migrations.py create "add user preferences table"
+
+# Apply all pending migrations
+python scripts/manage_migrations.py upgrade
+
+# Downgrade to previous migration
+python scripts/manage_migrations.py downgrade -1
+
+# Show current migration status
+python scripts/manage_migrations.py current
+
+# Show migration history
+python scripts/manage_migrations.py history
+
+# Initialize database with all migrations
+python scripts/manage_migrations.py init
+```
+
+### Using Alembic directly:
+
+```bash
+# Create migration
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
+alembic upgrade head
+
+# Downgrade migrations  
+alembic downgrade -1
+
+# Show current revision
+alembic current
+
+# Show history
+alembic history
+```
+
+## Docker Environment
+
+When running in Docker, use the management script through docker-compose:
+
+```bash
+# Apply migrations
+docker-compose exec api python scripts/manage_migrations.py upgrade
+
+# Create new migration
+docker-compose exec api python scripts/manage_migrations.py create "add new feature"
+```
+
+## Migration Best Practices
+
+1. **Always review auto-generated migrations** before applying them
+2. **Test migrations on a copy of production data** before deploying
+3. **Create backups** before running migrations in production
+4. **Use descriptive names** for migration messages
+5. **Include both upgrade and downgrade logic** when possible
+
+## Environment Variables
+
+The migration system uses these environment variables:
+
+- `DATABASE_URL` - Database connection string
+- `DEBUG` - Enable debug logging (optional)
+
+## Troubleshooting
+
+### Connection Issues
+```bash
+# Check database connection
+python scripts/manage_migrations.py current
+```
+
+### Merge Conflicts
+If you have merge conflicts in migration files:
+1. Resolve conflicts manually
+2. Create a merge migration if needed:
+   ```bash
+   alembic merge -m "merge migrations" heads
+   ```
+
+### Reset Migrations (Development Only)
+```bash
+# Drop all tables and reapply migrations
+python scripts/manage_migrations.py stamp base
+python scripts/manage_migrations.py upgrade head
+```

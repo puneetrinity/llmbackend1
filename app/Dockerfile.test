@@ -1,0 +1,27 @@
+# Dockerfile.test
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies including curl for health checks
+RUN apt-get update && apt-get install -y \
+    curl \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+COPY requirements-test.txt .
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
+
+# Copy application code
+COPY app/ ./app/
+COPY tests/ ./tests/
+COPY scripts/ ./scripts/
+
+# Create test results directory
+RUN mkdir -p test-results
+
+# Run tests by default
+CMD ["pytest", "tests/", "-v", "--junitxml=test-results/junit.xml", "--cov=app", "--cov-report=xml:test-results/coverage.xml"]
