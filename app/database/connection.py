@@ -1,13 +1,20 @@
-# app/database/connection.py - Fixed with optional database support
+# app/database/connection.py - CORRECTED VERSION
+import os
 import logging
 from typing import Optional, AsyncGenerator
+from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base  # FIXED: Correct import
 from sqlalchemy.pool import StaticPool
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# DEBUG: Add debug logging
+logger.info(f"🔍 DEBUG: Raw DATABASE_URL from env: {os.getenv('DATABASE_URL')}")
+logger.info(f"🔍 DEBUG: Settings DATABASE_URL: {settings.DATABASE_URL}")
+logger.info(f"🔍 DEBUG: Template resolved?: {settings.DATABASE_URL.startswith('postgresql://')}")
 
 # Create declarative base
 Base = declarative_base()
@@ -24,6 +31,13 @@ class DatabaseManager:
         """Initialize database engine with error handling"""
         try:
             database_url = settings.DATABASE_URL
+            logger.info(f"🔧 Initializing database: {database_url.split('@')[0] if '@' in database_url else database_url}...")
+            
+            # DEBUG: Check if template variable is resolved
+            if database_url.startswith("${{"):
+                logger.error(f"❌ DATABASE_URL template variable not resolved: {database_url}")
+                logger.error("❌ Railway template variables are not working!")
+                return
             
             # Skip database if URL is not properly configured
             if not database_url or database_url == "postgresql://user:pass@localhost:5432/searchdb":
@@ -99,11 +113,27 @@ class DatabaseManager:
                 logger.warning(f"⚠️ Database connection test failed: {e}")
                 raise
 
-    async def get_session(self) -> AsyncSession:
-        """Get async database session"""
+    def get_session(self) -> AsyncSession:
+        """Get async database session - DEPRECATED: Use get_session_context() instead"""
         if not self.is_available or not self.session_factory:
             raise RuntimeError("Database is not available")
         return self.session_factory()
+
+    @asynccontextmanager
+    async def get_session_context(self) -> AsyncGenerator[AsyncSession, None]:
+        """Get async database session with proper context management - THIS IS THE KEY FIX"""
+        if not self.is_available or not self.session_factory:
+            raise RuntimeError("Database is not available")
+        
+        session = self.session_factory()
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
     async def close(self):
         """Close database connections"""
@@ -128,20 +158,15 @@ if db_manager.engine is not None:
             cursor.close()
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency to get database session"""
+    """Dependency to get database session - FIXED"""
     if not db_manager.is_available:
         # Return a mock session that does nothing
         yield None
         return
     
-    async with db_manager.get_session() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+    # FIXED: Use the proper context manager
+    async with db_manager.get_session_context() as session:
+        yield session
 
 async def init_database():
     """Initialize database tables"""
@@ -184,7 +209,7 @@ async def check_database_health() -> dict:
     
     try:
         async with db_manager.get_session_context() as session:
-            result = await session.execute("SELECT 1")
+            await session.execute("SELECT 1")
             return {
                 "status": "healthy",
                 "message": "Database connection successful"
