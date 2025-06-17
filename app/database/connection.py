@@ -169,7 +169,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 async def init_database():
-    """Initialize database - Railway GitHub deployment compatible"""
+    """Initialize database - Simple approach that ignores 'already exists' errors"""
     if not db_manager.is_available:
         logger.warning("⚠️ Skipping database initialization - database not available")
         return
@@ -179,55 +179,25 @@ async def init_database():
         from app.database import models  # noqa: F401
         
         if db_manager.async_engine:
-            try:
-                # Try migrations first (future-proof approach)
-                import subprocess
-                import sys
-                
-                logger.info("🔄 Attempting database migrations...")
-                result = subprocess.run([
-                    sys.executable, 
-                    "scripts/manage_migrations.py", 
-                    "upgrade"
-                ], capture_output=True, text=True, timeout=30)
-                
-                if result.returncode == 0:
-                    logger.info("✅ Database migrations applied successfully")
-                    if result.stdout.strip():
-                        logger.info(f"Migration output: {result.stdout.strip()}")
-                    return  # Success with migrations
-                else:
-                    # Migrations failed, fall back to create_all
-                    if "No migrations to apply" in (result.stderr or ""):
-                        logger.info("✅ Database already up to date (no migrations needed)")
-                        return
-                    else:
-                        logger.info("⚠️ Migrations not available or failed, using create_all")
-                        
-            except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-                # Migration script not available or failed, fall back
-                logger.info(f"⚠️ Migration attempt failed: {e}")
-                logger.info("📋 Using create_all approach")
+            logger.info("🔧 Initializing database (ignore existing object warnings)...")
             
-            # Fallback: Use create_all with safety checks
-            try:
-                async with db_manager.async_engine.begin() as conn:
-                    # Create all tables with checkfirst to avoid "already exists" errors
-                    await conn.run_sync(Base.metadata.create_all, checkfirst=True)
-                logger.info("✅ Database tables initialized with create_all")
-                
-            except Exception as create_error:
-                if "already exists" in str(create_error).lower():
-                    logger.info("✅ Database tables already exist (no changes needed)")
-                else:
-                    logger.error(f"❌ Database table creation failed: {create_error}")
-                    # Don't raise - let app continue, database might still work
+            async with db_manager.async_engine.begin() as conn:
+                try:
+                    await conn.run_sync(Base.metadata.create_all)
+                    logger.info("✅ Database initialization completed")
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if any(phrase in error_str for phrase in ["already exists", "duplicate"]):
+                        logger.info("✅ Database objects already exist (this is normal)")
+                    else:
+                        logger.error(f"❌ Database initialization error: {e}")
+                        # Don't raise - continue anyway
         else:
             logger.warning("⚠️ No async engine available for database initialization")
             
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
-        # Don't raise the error - let the app continue without database
+        # Don't raise the error - let the app continue
 
 async def close_database():
     """Close database connections"""
