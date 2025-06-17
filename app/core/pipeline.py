@@ -54,7 +54,7 @@ class SearchPipeline:
                 raise PipelineException("Daily budget exceeded. Please try again tomorrow.")
             
             # Initialize database logger
-            async with db_manager.get_session() as db_session:
+            async with db_manager.get_session_context() as db_session:
                 db_logger = DatabaseLogger(db_session)
                 
                 # Log search request to database
@@ -321,7 +321,7 @@ class SearchPipeline:
     async def _check_database_health(self) -> str:
         """Check database connectivity"""
         try:
-            async with db_manager.get_session() as session:
+            async with db_manager.get_session_context() as session:
                 # Simple query to check connectivity
                 await session.execute("SELECT 1")
                 return "healthy"
@@ -377,7 +377,7 @@ class SearchPipeline:
     async def _get_database_stats(self) -> Dict:
         """Get database statistics"""
         try:
-            async with db_manager.get_session() as session:
+            async with db_manager.get_session_context() as session:
                 from app.database.repositories import SearchRequestRepository
                 search_repo = SearchRequestRepository(session)
                 
@@ -437,7 +437,7 @@ class SearchPipeline:
             await self.search_engine.search_multiple([test_query], max_results_per_query=1)
             
             # Test database connectivity
-            async with db_manager.get_session() as session:
+            async with db_manager.get_session_context() as session:
                 await session.execute("SELECT 1")
             
             # Skip content fetching and LLM for warm-up to save costs

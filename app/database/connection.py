@@ -183,7 +183,7 @@ async def check_database_health() -> dict:
         }
     
     try:
-        async with db_manager.get_session() as session:
+        async with db_manager.get_session_context() as session:
             result = await session.execute("SELECT 1")
             return {
                 "status": "healthy",

@@ -230,7 +230,7 @@ class DatabaseCostTracker:
             if not request_cost:
                 return
             
-            async with db_manager.get_session() as session:
+            async with db_manager.get_session_context() as session:
                 api_repo = ApiUsageRepository(session)
                 
                 await api_repo.create_api_usage(
@@ -255,7 +255,7 @@ class DatabaseCostTracker:
             if not request_cost.search_request_db_id:
                 return
             
-            async with db_manager.get_session() as session:
+            async with db_manager.get_session_context() as session:
                 cost_repo = CostRecordRepository(session)
                 user_repo = UserRepository(session)
                 
@@ -307,7 +307,7 @@ class DatabaseCostTracker:
         try:
             today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             
-            async with db_manager.get_session() as session:
+            async with db_manager.get_session_context() as session:
                 from app.database.repositories import StatsRepository
                 stats_repo = StatsRepository(session)
                 
@@ -377,7 +377,7 @@ class DatabaseCostTracker:
             else:
                 target_date = datetime.fromisoformat(date).replace(hour=0, minute=0, second=0, microsecond=0)
             
-            async with db_manager.get_session() as session:
+            async with db_manager.get_session_context() as session:
                 from app.database.repositories import StatsRepository
                 stats_repo = StatsRepository(session)
                 
@@ -457,7 +457,7 @@ class DatabaseCostTracker:
             # Check database if available
             if DATABASE_AVAILABLE and db_manager:
                 try:
-                    async with db_manager.get_session() as session:
+                    async with db_manager.get_session_context() as session:
                         from app.database.repositories import SearchRequestRepository
                         search_repo = SearchRequestRepository(session)
                         
