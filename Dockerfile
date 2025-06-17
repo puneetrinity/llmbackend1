@@ -1,4 +1,4 @@
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Build arguments
 ARG BUILDTIME
@@ -27,7 +27,12 @@ RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
 # Production stage
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
+
+# Re-declare build arguments for this stage
+ARG BUILDTIME="unknown"
+ARG VERSION="latest"
+ARG REVISION="unknown"
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
