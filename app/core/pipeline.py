@@ -9,7 +9,7 @@ from app.services.query_enhancer import QueryEnhancementService
 from app.services.search_engine import MultiSearchEngine
 from app.services.content_fetcher import ZenRowsContentFetcher
 from app.services.llm_analyzer import LLMAnalysisService
-from app.services.cache_service import CacheService, get_response
+from app.services.cache_service import CacheService
 from app.services.cost_tracker import DatabaseCostTracker
 from app.services.database_logger import DatabaseLogger
 from app.models.responses import SearchResponse
