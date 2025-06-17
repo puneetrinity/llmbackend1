@@ -1,18 +1,7 @@
-# app/services/__init__.py
+# app/services/__init__.py - MINIMAL VERSION TO AVOID CIRCULAR IMPORTS
 """Service layer modules"""
 
-from .query_enhancer import QueryEnhancementService
-from .search_engine import MultiSearchEngine
-from .content_fetcher import ZenRowsContentFetcher
-from .llm_analyzer import LLMAnalysisService
-from .cache_service import CacheService
-from .cost_tracker import CostTracker
+# DO NOT import services here to avoid circular imports
+# Import them directly where needed instead
 
-__all__ = [
-    "QueryEnhancementService",
-    "MultiSearchEngine", 
-    "ZenRowsContentFetcher",
-    "LLMAnalysisService",
-    "CacheService",
-    "CostTracker"
-]
+__all__ = []
