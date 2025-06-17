@@ -1,28 +1,35 @@
-# app/core/__init__.py
-"""Core application logic"""
+# app/core/__init__.py - FIXED: Remove circular import
 
-from .pipeline import SearchPipeline
+# Import only exceptions and utilities, not the pipeline
 from .exceptions import (
     PipelineException,
     QueryEnhancementException,
     SearchEngineException,
     ContentFetchException,
     LLMAnalysisException,
-    CacheException,
-    RateLimitException,
-    ValidationException,
-    ServiceUnavailableException
+    CacheException
 )
 
+from .security import (
+    get_current_user,
+    verify_api_key,
+    hash_api_key
+)
+
+# DO NOT import SearchPipeline here - it causes circular imports
+# Import SearchPipeline directly where needed instead
+
 __all__ = [
-    "SearchPipeline",
+    # Exceptions
     "PipelineException",
     "QueryEnhancementException", 
     "SearchEngineException",
     "ContentFetchException",
     "LLMAnalysisException",
     "CacheException",
-    "RateLimitException",
-    "ValidationException",
-    "ServiceUnavailableException"
+    
+    # Security
+    "get_current_user",
+    "verify_api_key", 
+    "hash_api_key"
 ]
