@@ -1,11 +1,10 @@
-# app/config/settings.py - Debug Version
+# app/config/settings.py - CORRECTED Version
 from pydantic_settings import BaseSettings  
-from pydantic import field_validator          
-from typing import List, Optional
+from pydantic import field_validator
+from typing import List, Optional, Union
 import os
 import logging
 
-# Setup basic logging to see what's happening
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -38,8 +37,8 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://user:pass@localhost:5432/searchdb"
     
-    # Security
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    # Security - Keep as Union to accept both string and list
+    ALLOWED_ORIGINS: Union[str, List[str]] = "*"
     RATE_LIMIT_PER_MINUTE: int = 60
     
     # Cost Controls
@@ -63,60 +62,48 @@ class Settings(BaseSettings):
     MAX_SEARCH_RESULTS: int = 10
     MAX_CONTENT_LENGTH: int = 5000  
     
+    # Safe validator that handles any input type
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
-        logger.info(f"🔍 ALLOWED_ORIGINS raw value: {v!r} (type: {type(v)})")
-        try:
-            if isinstance(v, str):
-                result = [origin.strip() for origin in v.split(",")]
-                logger.info(f"✅ ALLOWED_ORIGINS parsed: {result}")
-                return result
-            logger.info(f"✅ ALLOWED_ORIGINS using as-is: {v}")
+        """Parse CORS origins safely"""
+        if v is None:
+            return ["*"]
+        
+        if isinstance(v, str):
+            if v.strip() == "":
+                return ["*"]
+            # Handle comma-separated string
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        
+        if isinstance(v, list):
             return v
-        except Exception as e:
-            logger.error(f"❌ Error parsing ALLOWED_ORIGINS: {e}")
-            return ["*"]  # Safe fallback
+        
+        # For any other type, return safe default
+        return ["*"]
     
     @field_validator("DEBUG", mode="before")
     @classmethod
     def parse_debug(cls, v):
-        logger.info(f"🔍 DEBUG raw value: {v!r} (type: {type(v)})")
-        try:
-            if isinstance(v, str):
-                result = v.lower() in ("true", "1", "yes", "on")
-                logger.info(f"✅ DEBUG parsed: {result}")
-                return result
+        """Parse DEBUG boolean safely"""
+        if isinstance(v, bool):
             return v
-        except Exception as e:
-            logger.error(f"❌ Error parsing DEBUG: {e}")
-            return False
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "on")
+        return bool(v)
     
     model_config = {
         "env_file": ".env",
         "case_sensitive": True,
-        "extra": "ignore"  # Ignore unknown env vars
+        "extra": "ignore"
     }
 
-# Debug environment variables before creating settings
-logger.info("🔍 Checking environment variables...")
-for key in ["ALLOWED_ORIGINS", "DEBUG", "REDIS_URL", "DATABASE_URL"]:
-    value = os.getenv(key)
-    logger.info(f"   {key} = {value!r}")
-
-# Create settings with error handling
+# ✅ CORRECT: Let BaseSettings auto-load from environment
 try:
-    logger.info("🚀 Creating Settings instance...")
-    settings = Settings()
-    logger.info("✅ Settings created successfully!")
+    settings = Settings()  # This is the correct way!
+    logger.info("✅ Settings loaded successfully")
+    logger.info(f"   ALLOWED_ORIGINS: {settings.ALLOWED_ORIGINS}")
+    logger.info(f"   DEBUG: {settings.DEBUG}")
 except Exception as e:
-    logger.error(f"❌ Settings creation failed: {e}")
-    logger.error(f"   Error type: {type(e)}")
-    # Create minimal fallback
-    logger.warning("🔄 Creating fallback settings...")
-    settings = Settings.model_validate({
-        "ALLOWED_ORIGINS": ["*"],
-        "DEBUG": False,
-        "REDIS_URL": "redis://localhost:6379",
-        "DATABASE_URL": "postgresql://user:pass@localhost:5432/searchdb"
-    })
+    logger.error(f"❌ Failed to load settings: {e}")
+    raise  # Let the error bubble up - don't mask it
