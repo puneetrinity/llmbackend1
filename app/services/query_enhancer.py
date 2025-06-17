@@ -97,7 +97,7 @@ class QueryEnhancementService:
                 "processing_time": processing_time
             }
             
-            await self.cache.set(cache_key, enhancement_data, prefix="enhancement")
+            await self.cache.set(cache_key, enhancement_data, namespace="enhancement")
             
             logger.info(f"Enhanced query '{query}' -> {len(enhanced_queries)} variations in {processing_time:.2f}s")
             return enhanced_queries

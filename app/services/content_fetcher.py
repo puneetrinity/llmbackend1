@@ -129,7 +129,7 @@ class ZenRowsContentFetcher:
             )
             
             # Cache the result
-            await self.cache.set(cache_key, content_data.dict(), ttl=7200, prefix="content")  # 2 hour cache
+            await self.cache.set(cache_key, content_data.dict(), ttl=7200, namespace="content")  # 2 hour cache
             
             logger.info(f"Successfully fetched content from: {url[:50]}... ({content_data.word_count} words)")
             return content_data

@@ -84,7 +84,7 @@ class MultiSearchEngine:
                 for query, results in query_results.items():
                     cache_key = f"search:{hash(query)}"
                     result_dicts = [result.dict() for result in results]
-                    await self.cache.set(cache_key, result_dicts, prefix="search")
+                    await self.cache.set(cache_key, result_dicts, namespace="search")
             
             # Deduplicate and rank results
             final_results = self._deduplicate_and_rank(all_results, max_results_per_query * len(queries))
