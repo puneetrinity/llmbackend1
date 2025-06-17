@@ -8,7 +8,7 @@ import uuid
 import logging
 from contextlib import asynccontextmanager
 
-from app.api.endpoints import search, health, admin
+from app.api.endpoints import search, health
 from app.config.settings import settings
 from app.core.exceptions import CustomHTTPException
 from app.database.connection import init_database, close_database
@@ -82,7 +82,6 @@ app.add_middleware(
 # Include routers
 app.include_router(search.router, prefix="/api/v1", tags=["search"])
 app.include_router(health.router, prefix="/health", tags=["health"])
-app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
 # Global exception handler
 @app.exception_handler(CustomHTTPException)

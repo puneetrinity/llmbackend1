@@ -4,7 +4,6 @@ import logging
 from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, event, text
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base  # FIXED: Correct import
 from sqlalchemy.pool import StaticPool
