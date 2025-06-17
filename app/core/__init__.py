@@ -1,35 +1,43 @@
-# app/core/__init__.py - FIXED: Remove circular import
+# app/core/__init__.py - MINIMAL VERSION TO AVOID ALL CIRCULAR IMPORTS
 
-# Import only exceptions and utilities, not the pipeline
-from .exceptions import (
-    PipelineException,
-    QueryEnhancementException,
-    SearchEngineException,
-    ContentFetchException,
-    LLMAnalysisException,
-    CacheException
-)
+# Only import exceptions that don't have circular dependencies
+try:
+    from .exceptions import (
+        PipelineException,
+        QueryEnhancementException,
+        SearchEngineException,
+        ContentFetchException,
+        LLMAnalysisException,
+        CacheException
+    )
+except ImportError:
+    # If exceptions import fails, define basic ones
+    class PipelineException(Exception):
+        pass
+    
+    class QueryEnhancementException(Exception):
+        pass
+    
+    class SearchEngineException(Exception):
+        pass
+    
+    class ContentFetchException(Exception):
+        pass
+    
+    class LLMAnalysisException(Exception):
+        pass
+    
+    class CacheException(Exception):
+        pass
 
-from .security import (
-    get_current_user,
-    verify_api_key,
-    hash_api_key
-)
-
-# DO NOT import SearchPipeline here - it causes circular imports
-# Import SearchPipeline directly where needed instead
+# DO NOT import SearchPipeline or any services here
+# Import them directly where needed to avoid circular imports
 
 __all__ = [
-    # Exceptions
     "PipelineException",
     "QueryEnhancementException", 
     "SearchEngineException",
     "ContentFetchException",
     "LLMAnalysisException",
-    "CacheException",
-    
-    # Security
-    "get_current_user",
-    "verify_api_key", 
-    "hash_api_key"
+    "CacheException"
 ]
