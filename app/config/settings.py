@@ -1,4 +1,4 @@
-# app/config/settings.py - CORRECTED Version
+# app/config/settings.py - RAILWAY PROPER VERSION
 from pydantic_settings import BaseSettings  
 from pydantic import field_validator
 from typing import List, Optional, Union
@@ -27,17 +27,17 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.1
     LLM_TIMEOUT: int = 30
     
-    # Cache Configuration
-    REDIS_URL: str = "redis://localhost:6379"
+    # Cache Configuration - RAILWAY TEMPLATE VARIABLE
+    REDIS_URL: str = "${{ Redis.REDIS_URL }}"  # ✅ Railway template variable
     CACHE_TTL_QUERY_ENHANCEMENT: int = 3600  
     CACHE_TTL_SEARCH_RESULTS: int = 1800     
     CACHE_TTL_FINAL_RESPONSE: int = 14400    
     MEMORY_CACHE_SIZE: int = 1000
     
-    # Database
-    DATABASE_URL: str = "postgresql://user:pass@localhost:5432/searchdb"
+    # Database - RAILWAY TEMPLATE VARIABLE  
+    DATABASE_URL: str = "${{ Postgres.DATABASE_URL }}"  # ✅ Railway template variable
     
-    # Security - Keep as Union to accept both string and list
+    # Security
     ALLOWED_ORIGINS: Union[str, List[str]] = "*"
     RATE_LIMIT_PER_MINUTE: int = 60
     
@@ -62,7 +62,6 @@ class Settings(BaseSettings):
     MAX_SEARCH_RESULTS: int = 10
     MAX_CONTENT_LENGTH: int = 5000  
     
-    # Safe validator that handles any input type
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
@@ -73,13 +72,11 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             if v.strip() == "":
                 return ["*"]
-            # Handle comma-separated string
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         
         if isinstance(v, list):
             return v
         
-        # For any other type, return safe default
         return ["*"]
     
     @field_validator("DEBUG", mode="before")
@@ -98,12 +95,6 @@ class Settings(BaseSettings):
         "extra": "ignore"
     }
 
-# ✅ CORRECT: Let BaseSettings auto-load from environment
-try:
-    settings = Settings()  # This is the correct way!
-    logger.info("✅ Settings loaded successfully")
-    logger.info(f"   ALLOWED_ORIGINS: {settings.ALLOWED_ORIGINS}")
-    logger.info(f"   DEBUG: {settings.DEBUG}")
-except Exception as e:
-    logger.error(f"❌ Failed to load settings: {e}")
-    raise  # Let the error bubble up - don't mask it
+# ✅ Proper BaseSettings instantiation
+settings = Settings()
+logger.info("✅ Settings loaded with Railway template variables")
