@@ -143,27 +143,6 @@ class CacheService:
             logger.error(f"Cache health check failed: {e}")
             return "unhealthy"
 
-
-    async def get_response(self, query: str) -> Optional[Any]:
-        """Get cached response for a query"""
-        cache_key = f"response:{hash(query)}"
-        return await self.get(cache_key, "responses")
-
-    async def store_response(self, query: str, response: Any) -> bool:
-        """Store response in cache"""
-        from app.config.settings import settings
-        cache_key = f"response:{hash(query)}"
-        # Convert response to dict if it has a dict method
-        if hasattr(response, 'dict'):
-            response_data = response.dict()
-        elif hasattr(response, '__dict__'):
-            response_data = response.__dict__
-        else:
-            response_data = response
-            
-        ttl = getattr(settings, 'CACHE_TTL_FINAL_RESPONSE', 14400)  # 4 hours default
-        return await self.set(cache_key, response_data, ttl, "responses")
-
     async def close(self):
         if self.redis_client:
             try:
