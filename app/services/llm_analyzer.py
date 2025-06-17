@@ -1,4 +1,4 @@
-# app/services/llm_analyzer.py
+# app/services/llm_analyzer.py - Railway-compatible version
 import asyncio
 import aiohttp
 import logging
@@ -22,6 +22,7 @@ class LLMAnalysisService:
         self.temperature = settings.LLM_TEMPERATURE
         self.timeout = settings.LLM_TIMEOUT
         self.session = None
+        self.is_available = None  # Cache availability status
         
     async def _get_session(self):
         """Lazy initialization of HTTP session"""
@@ -31,9 +32,48 @@ class LLMAnalysisService:
             )
         return self.session
     
+    async def _check_ollama_availability(self) -> bool:
+        """Check if Ollama is available and has the required model"""
+        if self.is_available is not None:
+            return self.is_available  # Use cached result
+        
+        try:
+            session = await self._get_session()
+            
+            # Check if Ollama is running
+            async with session.get(f"{self.ollama_host}/api/version") as response:
+                if response.status != 200:
+                    logger.warning(f"Ollama not responding: HTTP {response.status}")
+                    self.is_available = False
+                    return False
+            
+            # Check if model is available
+            async with session.get(f"{self.ollama_host}/api/tags") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    models = [model.get('name', '') for model in data.get('models', [])]
+                    
+                    if self.model in models:
+                        logger.info(f"✅ Ollama is available with model {self.model}")
+                        self.is_available = True
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Model {self.model} not found. Available models: {models}")
+                        self.is_available = False
+                        return False
+                else:
+                    logger.warning(f"Failed to get model list: HTTP {response.status}")
+                    self.is_available = False
+                    return False
+                    
+        except Exception as e:
+            logger.warning(f"Ollama availability check failed: {e}")
+            self.is_available = False
+            return False
+    
     async def analyze(self, query: str, content_data: List[ContentData], request_id: str) -> SearchResponse:
         """
-        Analyze content using LLM to generate intelligent response
+        Analyze content using LLM with Railway-compatible fallbacks
         """
         start_time = time.time()
         
@@ -41,17 +81,23 @@ class LLMAnalysisService:
             if not content_data:
                 return self._create_fallback_response(query, "No content available for analysis")
             
+            # Check if Ollama is available
+            if not await self._check_ollama_availability():
+                logger.info("Ollama not available, using simple summary")
+                return self._create_simple_summary_response(query, content_data)
+            
             # Prepare content for analysis
             prepared_content = self._prepare_content_for_analysis(content_data)
             
             # Generate LLM prompt
             prompt = self._create_analysis_prompt(query, prepared_content)
             
-            # Call LLM
-            llm_response = await self._call_ollama(prompt)
+            # Call LLM with retries
+            llm_response = await self._call_ollama_with_retry(prompt)
             
             if not llm_response:
-                return self._create_fallback_response(query, "LLM analysis failed")
+                logger.warning("LLM analysis failed, using simple summary")
+                return self._create_simple_summary_response(query, content_data)
             
             # Parse LLM response
             analysis_result = self._parse_llm_response(llm_response)
@@ -60,7 +106,7 @@ class LLMAnalysisService:
             confidence = self._calculate_confidence_score(analysis_result, content_data)
             
             # Extract sources
-            sources = [content.url for content in content_data]
+            sources = [content.url for content in content_data if hasattr(content, 'url')]
             
             processing_time = time.time() - start_time
             
@@ -80,179 +126,87 @@ class LLMAnalysisService:
             return response
             
         except Exception as e:
-            logger.error(f"LLM analysis error: {e}")
-            return self._create_fallback_response(query, f"Analysis error: {str(e)}")
+            logger.error(f"LLM analysis error: {str(e)}")
+            return self._create_simple_summary_response(query, content_data)
     
-    def _prepare_content_for_analysis(self, content_data: List[ContentData]) -> str:
-        """Prepare and combine content for LLM analysis"""
-        try:
-            prepared_sections = []
-            
-            for i, content in enumerate(content_data[:5]):  # Limit to top 5 sources
-                # Truncate individual content pieces
-                max_content_per_source = 800  # Characters per source
-                truncated_content = content.content[:max_content_per_source]
-                if len(content.content) > max_content_per_source:
-                    truncated_content += "..."
-                
-                section = f"Source {i+1} ({content.source_type.value}):\nTitle: {content.title}\nURL: {content.url}\nContent: {truncated_content}\n"
-                prepared_sections.append(section)
-            
-            return "\n---\n".join(prepared_sections)
-            
-        except Exception as e:
-            logger.error(f"Error preparing content for analysis: {e}")
-            return "Error processing content for analysis"
-    
-    def _create_analysis_prompt(self, query: str, content: str) -> str:
-        """Create a structured prompt for the LLM"""
-        prompt = f"""You are an AI assistant that provides accurate, helpful responses based on web search results. 
-
-USER QUERY: {query}
-
-SEARCH RESULTS:
-{content}
-
-INSTRUCTIONS:
-1. Provide a comprehensive, accurate answer to the user's query based on the search results above
-2. Synthesize information from multiple sources when possible
-3. Be factual and cite information appropriately
-4. If the search results don't fully answer the query, acknowledge what's missing
-5. Keep your response focused and relevant to the specific query
-6. Aim for 2-4 paragraphs unless a shorter or longer response is more appropriate
-7. Use clear, accessible language
-
-RESPONSE:"""
-        
-        return prompt
-    
-    async def _call_ollama(self, prompt: str) -> Optional[str]:
-        """Call Ollama API for LLM inference"""
-        try:
-            session = await self._get_session()
-            
-            url = f"{self.ollama_host}/api/generate"
-            payload = {
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "temperature": self.temperature,
-                    "num_predict": self.max_tokens,
-                    "top_p": 0.9,
-                    "top_k": 40
-                }
-            }
-            
-            async with session.post(url, json=payload) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    llm_response = data.get("response", "").strip()
-                    
-                    if llm_response:
-                        logger.info(f"LLM response generated ({len(llm_response)} chars)")
-                        return llm_response
-                    else:
-                        logger.warning("LLM returned empty response")
-                        return None
+    async def _call_ollama_with_retry(self, prompt: str, max_retries: int = 2) -> Optional[str]:
+        """Call Ollama with retry logic for Railway deployment"""
+        for attempt in range(max_retries + 1):
+            try:
+                return await self._call_ollama(prompt)
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Ollama call attempt {attempt + 1} failed: {e}, retrying...")
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
                 else:
-                    error_text = await response.text()
-                    logger.error(f"Ollama API error {response.status}: {error_text}")
+                    logger.error(f"All Ollama call attempts failed: {e}")
                     return None
-                    
-        except asyncio.TimeoutError:
-            logger.error("LLM request timed out")
-            return None
-        except Exception as e:
-            logger.error(f"Ollama API call error: {e}")
-            return None
     
-    def _parse_llm_response(self, response: str) -> str:
-        """Parse and clean LLM response"""
-        try:
-            # Remove any system messages or artifacts
-            cleaned_response = response.strip()
-            
-            # Remove common LLM artifacts
-            artifacts_to_remove = [
-                "RESPONSE:",
-                "Answer:",
-                "Based on the search results:",
-                "According to the provided information:"
-            ]
-            
-            for artifact in artifacts_to_remove:
-                if cleaned_response.startswith(artifact):
-                    cleaned_response = cleaned_response[len(artifact):].strip()
-            
-            # Ensure reasonable length
-            if len(cleaned_response) < 50:
-                return "The analysis generated a response that was too short to be meaningful."
-            
-            if len(cleaned_response) > 2000:  # Truncate very long responses
-                cleaned_response = cleaned_response[:2000] + "..."
-            
-            return cleaned_response
-            
-        except Exception as e:
-            logger.error(f"Error parsing LLM response: {e}")
-            return response  # Return original if parsing fails
+    async def _call_ollama(self, prompt: str) -> str:
+        """Make actual call to Ollama API"""
+        session = await self._get_session()
+        
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens
+            }
+        }
+        
+        async with session.post(f"{self.ollama_host}/api/generate", json=payload) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get("response", "")
+            else:
+                error_text = await response.text()
+                raise LLMAnalysisException(f"Ollama API error: {response.status} - {error_text}")
     
-    def _calculate_confidence_score(self, analysis: str, content_data: List[ContentData]) -> float:
-        """Calculate confidence score for the analysis"""
-        try:
-            score = 0.5  # Base score
+    def _create_simple_summary_response(self, query: str, content_data: List[ContentData]) -> SearchResponse:
+        """Create a simple summary response when LLM is not available"""
+        start_time = time.time()
+        
+        # Create a basic summary from the content
+        summary_parts = []
+        sources = []
+        
+        for i, content in enumerate(content_data[:3]):  # Use first 3 sources
+            if hasattr(content, 'title') and content.title:
+                summary_parts.append(f"• {content.title}")
+            elif hasattr(content, 'content') and content.content:
+                # Take first sentence of content
+                first_sentence = content.content.split('.')[0][:200]
+                summary_parts.append(f"• {first_sentence}...")
             
-            # Content quality factor
-            avg_content_confidence = sum(content.confidence_score for content in content_data) / len(content_data)
-            score += avg_content_confidence * 0.3
-            
-            # Response length factor (reasonable length indicates better analysis)
-            response_length = len(analysis.split())
-            if 50 <= response_length <= 300:
-                score += 0.2
-            elif response_length > 20:
-                score += 0.1
-            
-            # Source diversity factor
-            unique_domains = len(set(content.url.split('/')[2] for content in content_data if '/' in content.url))
-            if unique_domains > 1:
-                score += 0.1
-            
-            # Penalize if response seems generic or error-like
-            generic_indicators = ['error', 'unable to', 'cannot provide', 'insufficient information']
-            if any(indicator in analysis.lower() for indicator in generic_indicators):
-                score -= 0.2
-            
-            return min(max(score, 0.0), 1.0)
-            
-        except Exception as e:
-            logger.warning(f"Error calculating confidence score: {e}")
-            return 0.5
-    
-    def _estimate_cost(self, prompt: str, response: str) -> float:
-        """Estimate the cost of the LLM call (Ollama is free, but good to track)"""
-        try:
-            # Ollama is free to run locally, but we can estimate computational cost
-            prompt_tokens = len(prompt.split()) * 1.3  # Rough token estimation
-            response_tokens = len(response.split()) * 1.3
-            total_tokens = prompt_tokens + response_tokens
-            
-            # Estimated cost per 1k tokens (fictional cost for tracking)
-            cost_per_1k_tokens = 0.001  # $0.001 per 1k tokens
-            estimated_cost = (total_tokens / 1000) * cost_per_1k_tokens
-            
-            return round(estimated_cost, 6)
-            
-        except Exception as e:
-            logger.warning(f"Error estimating cost: {e}")
-            return 0.0
-    
-    def _create_fallback_response(self, query: str, error_message: str) -> SearchResponse:
-        """Create a fallback response when analysis fails"""
+            if hasattr(content, 'url'):
+                sources.append(content.url)
+        
+        if summary_parts:
+            answer = f"Based on the search results:\n\n" + "\n".join(summary_parts)
+            answer += f"\n\nThis summary is based on {len(content_data)} sources. For detailed analysis, please ensure the LLM service is available."
+        else:
+            answer = "Search results were found but could not be processed. Please try again or contact support."
+        
+        processing_time = time.time() - start_time
+        
         return SearchResponse(
             query=query,
-            answer=f"I apologize, but I encountered an issue while analyzing the search results for your query. {error_message}. Please try rephrasing your question or try again later.",
+            answer=answer,
+            sources=sources,
+            confidence=0.6,  # Lower confidence for simple summary
+            processing_time=processing_time,
+            cached=False,
+            cost_estimate=0.0,  # No LLM cost
+            timestamp=datetime.utcnow()
+        )
+    
+    def _create_fallback_response(self, query: str, reason: str) -> SearchResponse:
+        """Create fallback response when analysis fails"""
+        return SearchResponse(
+            query=query,
+            answer=f"Sorry, I couldn't analyze the search results. Reason: {reason}",
             sources=[],
             confidence=0.1,
             processing_time=0.0,
@@ -262,20 +216,12 @@ RESPONSE:"""
         )
     
     async def health_check(self) -> str:
-        """Check LLM service health"""
+        """Check health of LLM service"""
         try:
-            # Test with a simple prompt
-            test_prompt = "Hello, please respond with 'Health check successful' if you can process this message."
-            
-            response = await self._call_ollama(test_prompt)
-            
-            if response and "successful" in response.lower():
+            if await self._check_ollama_availability():
                 return "healthy"
-            elif response:
-                return "degraded"  # LLM is responding but not correctly
             else:
-                return "unhealthy"
-                
+                return "unhealthy - ollama not available"
         except Exception as e:
             logger.error(f"LLM health check failed: {e}")
             return "unhealthy"
@@ -284,4 +230,57 @@ RESPONSE:"""
         """Close HTTP session"""
         if self.session:
             await self.session.close()
-            self.session = None
+    
+    # Helper methods (implement these based on your existing code)
+    def _prepare_content_for_analysis(self, content_data: List[ContentData]) -> str:
+        """Prepare content for LLM analysis"""
+        content_parts = []
+        for content in content_data[:5]:  # Limit to first 5 sources
+            if hasattr(content, 'content') and content.content:
+                # Truncate content to avoid token limits
+                truncated = content.content[:1000]
+                content_parts.append(f"Source: {truncated}")
+        
+        return "\n\n".join(content_parts)
+    
+    def _create_analysis_prompt(self, query: str, content: str) -> str:
+        """Create prompt for LLM analysis"""
+        return f"""Based on the following search results, provide a comprehensive answer to the query: "{query}"
+
+Search Results:
+{content}
+
+Please provide a clear, accurate, and well-structured answer based on the search results. If the search results don't contain enough information to answer the query, mention that limitation.
+
+Answer:"""
+    
+    def _parse_llm_response(self, response: str) -> str:
+        """Parse and clean LLM response"""
+        return response.strip()
+    
+    def _calculate_confidence_score(self, answer: str, content_data: List[ContentData]) -> float:
+        """Calculate confidence score based on answer and content quality"""
+        base_score = 0.8
+        
+        # Adjust based on content quantity
+        if len(content_data) >= 3:
+            base_score += 0.1
+        elif len(content_data) == 1:
+            base_score -= 0.2
+        
+        # Adjust based on answer length (longer = more comprehensive)
+        if len(answer) > 200:
+            base_score += 0.1
+        elif len(answer) < 50:
+            base_score -= 0.2
+        
+        return min(max(base_score, 0.1), 1.0)
+    
+    def _estimate_cost(self, prompt: str, response: str) -> float:
+        """Estimate cost based on token usage"""
+        # Rough estimation: 4 characters = 1 token
+        total_chars = len(prompt) + len(response)
+        estimated_tokens = total_chars / 4
+        
+        # Assume $0.0001 per 1000 tokens for local LLM
+        return (estimated_tokens / 1000) * 0.0001
