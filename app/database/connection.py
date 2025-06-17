@@ -181,7 +181,7 @@ async def init_database():
         if db_manager.async_engine:
             async with db_manager.async_engine.begin() as conn:
                 # Create all tables
-                await conn.run_sync(Base.metadata.create_all)
+                await conn.run_sync(Base.metadata.create_all, checkfirst=True)
             logger.info("✅ Database tables initialized")
         else:
             logger.warning("⚠️ No async engine available for database initialization")
