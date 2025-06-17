@@ -149,19 +149,29 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 check_system() {
     log "🔍 Checking system requirements..."
     
-    # Check available memory
-    local mem_available=$(free -m | awk 'NR==2{printf "%.0f", $7}')
-    if [ "$mem_available" -lt 2048 ]; then
-        log "⚠️ Warning: Low available memory (${mem_available}MB). Ollama may struggle."
-        log "💡 Recommendation: Increase container memory to 4GB+"
+    # Check available memory (fixed version)
+    local mem_available
+    if command -v free >/dev/null 2>&1; then
+        mem_available=$(free -m 2>/dev/null | awk 'NR==2{printf "%.0f", $7}' || echo "0")
+        if [ "$mem_available" -gt 0 ] && [ "$mem_available" -lt 2048 ]; then
+            log "⚠️ Warning: Low available memory (${mem_available}MB). Ollama may struggle."
+            log "💡 Recommendation: Increase container memory to 4GB+"
+        elif [ "$mem_available" -gt 0 ]; then
+            log "✅ Memory check passed (${mem_available}MB available)"
+        else
+            log "ℹ️ Memory check skipped (unable to determine available memory)"
+        fi
     else
-        log "✅ Memory check passed (${mem_available}MB available)"
+        log "ℹ️ Memory check skipped (free command not available)"
     fi
     
     # Check disk space
-    local disk_available=$(df /home/ollama/.ollama 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
-    if [ "$disk_available" != "unknown" ] && [ "$disk_available" -lt 5000000 ]; then
-        log "⚠️ Warning: Low disk space. Model downloads may fail."
+    local disk_available
+    if command -v df >/dev/null 2>&1; then
+        disk_available=$(df /home/ollama/.ollama 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
+        if [ "$disk_available" != "unknown" ] && [ "$disk_available" -lt 5000000 ]; then
+            log "⚠️ Warning: Low disk space. Model downloads may fail."
+        fi
     fi
 }
 
