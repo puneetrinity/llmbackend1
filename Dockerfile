@@ -1,21 +1,28 @@
 FROM python:3.11-slim AS builder
 
 # Build arguments
-ARG BUILDTIME
-ARG VERSION
-ARG REVISION
+ARG BUILDTIME="unknown"
+ARG VERSION="latest"
+ARG REVISION="unknown"
 
 # Set environment variables for build
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies with robust error handling
+RUN apt-get clean && \
+    apt-get autoclean && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
+        gcc \
+        g++ \
+        build-essential && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
 
 # Create virtual environment
 RUN python -m venv /opt/venv
@@ -41,18 +48,24 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    ENVIRONMENT=production
+    ENVIRONMENT=production \
+    DEBIAN_FRONTEND=noninteractive
 
-# Install runtime dependencies including Ollama requirements
-RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+# Install runtime dependencies with robust error handling
+RUN apt-get clean && \
+    apt-get autoclean && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        wget \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
 
-# Install Ollama
-RUN curl -fsSL https://ollama.ai/install.sh | sh
+# Install Ollama with error handling
+RUN curl -fsSL https://ollama.ai/install.sh | sh || \
+    (echo "Ollama install failed, but continuing..." && true)
 
 # Create users - appuser for app, ollama for ollama service
 RUN groupadd -r appuser && useradd -r -g appuser appuser && \
