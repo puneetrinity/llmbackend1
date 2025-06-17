@@ -1,4 +1,3 @@
-from sqlalchemy import text
 # scripts/runpod_setup.py
 """
 RunPod deployment setup script
@@ -29,7 +28,7 @@ async def check_database_connection(max_retries=5, delay=5):
             
             # Test connection
             async with db_manager.get_session() as session:
-                await session.execute(text("SELECT 1"))
+                await session.execute("SELECT 1")
             
             logger.info("✅ Database connection successful!")
             return True

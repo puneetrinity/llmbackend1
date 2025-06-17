@@ -3,7 +3,7 @@ import os
 import logging
 from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base  # FIXED: Correct import
 from sqlalchemy.pool import StaticPool
@@ -107,7 +107,7 @@ class DatabaseManager:
         if self.engine:
             try:
                 with self.engine.connect() as conn:
-                    conn.execute(text("SELECT 1"))
+                    conn.execute("SELECT 1")
                 logger.info("✅ Database connection test successful")
             except Exception as e:
                 logger.warning(f"⚠️ Database connection test failed: {e}")
@@ -152,9 +152,9 @@ if db_manager.engine is not None:
         """Set SQLite pragmas for better performance"""
         if 'sqlite' in str(dbapi_connection):
             cursor = dbapi_connection.cursor()
-            cursor.execute(text("PRAGMA foreign_keys=ON"))
-            cursor.execute(text("PRAGMA journal_mode=WAL"))
-            cursor.execute(text("PRAGMA synchronous=NORMAL"))
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
             cursor.close()
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -209,7 +209,7 @@ async def check_database_health() -> dict:
     
     try:
         async with db_manager.get_session_context() as session:
-            await session.execute(text("SELECT 1"))
+            await session.execute("SELECT 1")
             return {
                 "status": "healthy",
                 "message": "Database connection successful"

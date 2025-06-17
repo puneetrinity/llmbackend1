@@ -1,4 +1,3 @@
-from sqlalchemy import text
 # alembic/versions/002_20241201_1200_add_serpapi_fields.py
 """Add SerpApi cost tracking fields
 
@@ -33,9 +32,9 @@ def upgrade() -> None:
     op.create_check_constraint('check_daily_serpapi_cost', 'daily_stats', 'serpapi_search_cost >= 0')
     
     # Update existing records to set default values
-    op.execute(text("UPDATE cost_records SET serpapi_search_cost = 0.0 WHERE serpapi_search_cost IS NULL"))
-    op.execute(text("UPDATE cost_records SET serpapi_searches = 0 WHERE serpapi_searches IS NULL"))
-    op.execute(text("UPDATE daily_stats SET serpapi_search_cost = 0.0 WHERE serpapi_search_cost IS NULL"))
+    op.execute("UPDATE cost_records SET serpapi_search_cost = 0.0 WHERE serpapi_search_cost IS NULL")
+    op.execute("UPDATE cost_records SET serpapi_searches = 0 WHERE serpapi_searches IS NULL")
+    op.execute("UPDATE daily_stats SET serpapi_search_cost = 0.0 WHERE serpapi_search_cost IS NULL")
     
     # Make columns non-nullable after setting defaults
     op.alter_column('cost_records', 'serpapi_search_cost', nullable=False)

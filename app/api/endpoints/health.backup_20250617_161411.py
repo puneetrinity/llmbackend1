@@ -1,4 +1,3 @@
-from sqlalchemy import text
 # app/api/endpoints/health.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,7 +80,7 @@ async def readiness_check(
         # Additional database readiness check
         if ready:
             try:
-                await db_session.execute(text("SELECT 1"))
+                await db_session.execute("SELECT 1")
                 db_ready = True
             except Exception as e:
                 logger.warning(f"Database not ready: {e}")
@@ -119,7 +118,7 @@ async def database_health_check(
     
     try:
         # Test basic connectivity
-        await db_session.execute(text("SELECT 1"))
+        await db_session.execute("SELECT 1")
         
         # Test table access
         table_checks = {}

@@ -1,4 +1,3 @@
-from sqlalchemy import text
 #!/usr/bin/env python3
 """
 Database Migration Management Script
@@ -44,7 +43,7 @@ async def check_database_connection():
         await db_manager.initialize()
         
         async with db_manager.get_session() as session:
-            await session.execute(text("SELECT 1"))
+            await session.execute("SELECT 1")
         
         print("✅ Database connection successful")
         return True

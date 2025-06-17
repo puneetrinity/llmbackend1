@@ -1,4 +1,3 @@
-from sqlalchemy import text
 # app/api/endpoints/admin.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession

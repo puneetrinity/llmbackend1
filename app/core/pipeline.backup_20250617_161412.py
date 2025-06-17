@@ -1,4 +1,3 @@
-from sqlalchemy import text
 # app/core/pipeline.py
 import asyncio
 import time
@@ -324,7 +323,7 @@ class SearchPipeline:
         try:
             async with db_manager.get_session_context() as session:
                 # Simple query to check connectivity
-                await session.execute(text("SELECT 1"))
+                await session.execute("SELECT 1")
                 return "healthy"
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
@@ -439,7 +438,7 @@ class SearchPipeline:
             
             # Test database connectivity
             async with db_manager.get_session_context() as session:
-                await session.execute(text("SELECT 1"))
+                await session.execute("SELECT 1")
             
             # Skip content fetching and LLM for warm-up to save costs
             
