@@ -1,4 +1,4 @@
-# app/database/connection.py - CORRECTED VERSION
+# app/database/connection.py - RAILWAY DEPLOYMENT READY VERSION
 import os
 import logging
 from typing import Optional, AsyncGenerator
@@ -152,9 +152,9 @@ if db_manager.engine is not None:
         """Set SQLite pragmas for better performance"""
         if 'sqlite' in str(dbapi_connection):
             cursor = dbapi_connection.cursor()
-            cursor.execute(text("PRAGMA foreign_keys=ON"))
-            cursor.execute(text("PRAGMA journal_mode=WAL"))
-            cursor.execute(text("PRAGMA synchronous=NORMAL"))
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
             cursor.close()
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -169,7 +169,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 async def init_database():
-    """Initialize database tables"""
+    """Initialize database - Railway GitHub deployment compatible"""
     if not db_manager.is_available:
         logger.warning("⚠️ Skipping database initialization - database not available")
         return
@@ -179,10 +179,49 @@ async def init_database():
         from app.database import models  # noqa: F401
         
         if db_manager.async_engine:
-            async with db_manager.async_engine.begin() as conn:
-                # Create all tables
-                await conn.run_sync(Base.metadata.create_all, checkfirst=True)
-            logger.info("✅ Database tables initialized")
+            try:
+                # Try migrations first (future-proof approach)
+                import subprocess
+                import sys
+                
+                logger.info("🔄 Attempting database migrations...")
+                result = subprocess.run([
+                    sys.executable, 
+                    "scripts/manage_migrations.py", 
+                    "upgrade"
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0:
+                    logger.info("✅ Database migrations applied successfully")
+                    if result.stdout.strip():
+                        logger.info(f"Migration output: {result.stdout.strip()}")
+                    return  # Success with migrations
+                else:
+                    # Migrations failed, fall back to create_all
+                    if "No migrations to apply" in (result.stderr or ""):
+                        logger.info("✅ Database already up to date (no migrations needed)")
+                        return
+                    else:
+                        logger.info("⚠️ Migrations not available or failed, using create_all")
+                        
+            except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+                # Migration script not available or failed, fall back
+                logger.info(f"⚠️ Migration attempt failed: {e}")
+                logger.info("📋 Using create_all approach")
+            
+            # Fallback: Use create_all with safety checks
+            try:
+                async with db_manager.async_engine.begin() as conn:
+                    # Create all tables with checkfirst to avoid "already exists" errors
+                    await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+                logger.info("✅ Database tables initialized with create_all")
+                
+            except Exception as create_error:
+                if "already exists" in str(create_error).lower():
+                    logger.info("✅ Database tables already exist (no changes needed)")
+                else:
+                    logger.error(f"❌ Database table creation failed: {create_error}")
+                    # Don't raise - let app continue, database might still work
         else:
             logger.warning("⚠️ No async engine available for database initialization")
             
