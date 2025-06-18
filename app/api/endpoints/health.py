@@ -1,5 +1,5 @@
 from sqlalchemy import text
-# app/api/endpoints/health.py
+# app/api/endpoints/health.py - FIXED VERSION
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 import time
@@ -15,9 +15,10 @@ from app.services.analytics_service import AnalyticsService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.get("/", response_model=HealthResponse)
+# FIX: Changed from "/" to "" to avoid trailing slash redirect
+@router.get("", response_model=HealthResponse)  # CHANGED: Removed the "/"
 async def health_check():
-    """Basic health check endpoint"""
+    """Basic health check endpoint - now responds to /health without redirect"""
     return HealthResponse(
         status="healthy",
         services={"api": "healthy"},
@@ -130,7 +131,7 @@ async def database_health_check(
         
         for table in essential_tables:
             try:
-                result = await db_session.execute(f"SELECT COUNT(*) FROM {table} LIMIT 1")
+                result = await db_session.execute(text(f"SELECT COUNT(*) FROM {table} LIMIT 1"))
                 count = result.scalar()
                 table_checks[table] = {"status": "accessible", "record_count": count}
             except Exception as e:
@@ -284,7 +285,7 @@ async def _check_database_details(db_session: AsyncSession) -> Dict:
         # Count recent errors
         try:
             error_result = await db_session.execute(
-                "SELECT COUNT(*) FROM error_logs WHERE created_at > NOW() - INTERVAL '1 hour'"
+                text("SELECT COUNT(*) FROM error_logs WHERE created_at > NOW() - INTERVAL '1 hour'")
             )
             db_details["database_recent_errors"] = error_result.scalar()
         except Exception:
@@ -293,7 +294,7 @@ async def _check_database_details(db_session: AsyncSession) -> Dict:
         # Count recent requests
         try:
             request_result = await db_session.execute(
-                "SELECT COUNT(*) FROM search_requests WHERE created_at > NOW() - INTERVAL '1 hour'"
+                text("SELECT COUNT(*) FROM search_requests WHERE created_at > NOW() - INTERVAL '1 hour'")
             )
             db_details["database_recent_requests"] = request_result.scalar()
         except Exception:
@@ -314,19 +315,19 @@ async def _get_recent_database_activity(db_session: AsyncSession) -> Dict:
         
         # Recent requests (last hour)
         result = await db_session.execute(
-            "SELECT COUNT(*) FROM search_requests WHERE created_at > NOW() - INTERVAL '1 hour'"
+            text("SELECT COUNT(*) FROM search_requests WHERE created_at > NOW() - INTERVAL '1 hour'")
         )
         activity["requests_last_hour"] = result.scalar()
         
         # Recent errors (last hour)
         result = await db_session.execute(
-            "SELECT COUNT(*) FROM error_logs WHERE created_at > NOW() - INTERVAL '1 hour'"
+            text("SELECT COUNT(*) FROM error_logs WHERE created_at > NOW() - INTERVAL '1 hour'")
         )
         activity["errors_last_hour"] = result.scalar()
         
         # Recent users (last 24 hours)
         result = await db_session.execute(
-            "SELECT COUNT(DISTINCT user_id) FROM search_requests WHERE created_at > NOW() - INTERVAL '24 hours' AND user_id IS NOT NULL"
+            text("SELECT COUNT(DISTINCT user_id) FROM search_requests WHERE created_at > NOW() - INTERVAL '24 hours' AND user_id IS NOT NULL")
         )
         activity["unique_users_last_24h"] = result.scalar()
         
@@ -346,7 +347,7 @@ async def _get_database_metrics(db_session: AsyncSession) -> Dict:
         
         for table in tables:
             try:
-                result = await db_session.execute(f"SELECT COUNT(*) FROM {table}")
+                result = await db_session.execute(text(f"SELECT COUNT(*) FROM {table}"))
                 table_sizes[table] = result.scalar()
             except Exception:
                 table_sizes[table] = "error"
