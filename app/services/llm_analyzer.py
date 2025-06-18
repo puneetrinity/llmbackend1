@@ -27,10 +27,25 @@ class LLMAnalysisService:
         self.availability_cache_duration = 60  # Cache availability for 60 seconds
         
     async def _get_session(self, force_new: bool = False):
-        """Lazy initialization of HTTP session with option to force recreation"""
-        if self.session is None or force_new:
-            if self.session:
-                await self.session.close()
+    """Lazy initialization of HTTP session with option to force recreation"""
+    if self.session is None or force_new:
+        if self.session:
+            await self.session.close()
+        
+        # Simple connector without problematic parameters
+        connector = aiohttp.TCPConnector(
+            limit=50,
+            limit_per_host=20,
+            keepalive_timeout=30
+        )
+        
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
+            headers={"Content-Type": "application/json"}
+        )
+        
+    return self.session
             
             # Create session with proper connector settings
             connector = aiohttp.TCPConnector(
